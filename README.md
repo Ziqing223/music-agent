@@ -13,7 +13,7 @@ Music Agent is a local-first AI music companion for Apple Music on macOS. It tur
 - catalog preview playback;
 - play, pause, resume, next and previous controls;
 - explicit recommendation-item selection and structured follow-up actions;
-- durable like/dislike feedback and preference learning;
+- durable Music Agent preference feedback and preference learning;
 - current playback and recommendation context;
 - fail-closed action execution with readback/reconciliation;
 - a local browser UI;

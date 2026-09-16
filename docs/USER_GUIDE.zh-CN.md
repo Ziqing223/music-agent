@@ -76,7 +76,7 @@ V1 的重点是：
 进入项目目录：
 
 ```bash
-cd /path/to/music-agent-core
+cd /path/to/music-agent
 ```
 
 ---
@@ -560,13 +560,13 @@ Native App 当前仍依赖本地 repository runtime。它会按下面的顺序�
 
 1. `MUSIC_AGENT_REPO_ROOT`；
 2. 兼容变量 `MUSIC_AGENT_REPO`；
-3. 默认 checkout：`~/Documents/music-agent-core`；
+3. 默认 checkout：`~/Documents/music-agent`；
 4. 如果直接从 repository 中运行未安装的 App，则继续从 App bundle 的上级目录向上寻找。
 
 因此公开仓库可以 clone 到其他位置；如果安装后的 App 无法自动找到 repository，可以在启动环境中显式设置：
 
 ```bash
-export MUSIC_AGENT_REPO_ROOT='/path/to/music-agent-core'
+export MUSIC_AGENT_REPO_ROOT='/path/to/music-agent'
 ```
 
 目标 repository 需要存在：
@@ -662,7 +662,7 @@ Native App V1 不是完全自包含应用。
 最简单的开发布局是：
 
 ```text
-~/Documents/music-agent-core
+~/Documents/music-agent
 ├── .venv/bin/python
 ├── pyproject.toml
 └── src/music_agent/
@@ -698,7 +698,7 @@ V1 的产品核心不包括：
 
 ```bash
 # 1. 进入项目
-cd /path/to/music-agent-core
+cd /path/to/music-agent
 
 # 2. 建环境
 python3.12 -m venv .venv

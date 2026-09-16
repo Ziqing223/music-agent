@@ -1,4 +1,4 @@
-// Music Agent — WebShell process lifecycle (P20 Slice B).
+// Music Agent — WebShell process lifecycle.
 //
 // Owns exactly one child process: the existing Python WebShell
 // (`python -m music_agent.cli web`), spawned without a Terminal, with
@@ -594,6 +594,12 @@ final class ShellController {
         var repoRoot = validatedRepo(environment["MUSIC_AGENT_REPO_ROOT"])
         if repoRoot == nil {
             repoRoot = validatedRepo(environment["MUSIC_AGENT_REPO"])
+        }
+        if repoRoot == nil {
+            repoRoot = validatedRepo(
+                URL(fileURLWithPath: home)
+                    .appendingPathComponent("Documents/music-agent")
+                    .path)
         }
         if repoRoot == nil {
             repoRoot = validatedRepo(
