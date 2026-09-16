@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "product-eval-run-v1",
+  "$defs": {
+    "rate": {
+      "type": "object",
+      "required": ["numerator", "denominator", "rate"],
+      "additionalProperties": true,
+      "properties": {
+        "numerator": {"type": "integer", "minimum": 0},
+        "denominator": {"type": "integer", "minimum": 0},
+        "rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+      }
+    },
+    "resultCounts": {
+      "type": "object",
+      "required": ["PASS", "FAIL", "PARTIAL", "NOT_RUN", "WAITING_FOR_UAT"],
+      "additionalProperties": false,
+      "properties": {
+        "PASS": {"type": "integer", "minimum": 0},
+        "FAIL": {"type": "integer", "minimum": 0},
+        "PARTIAL": {"type": "integer", "minimum": 0},
+        "NOT_RUN": {"type": "integer", "minimum": 0},
+        "WAITING_FOR_UAT": {"type": "integer", "minimum": 0}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["kind", "reference"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "reference": {"type": "string", "minLength": 1},
+        "notes": {"type": "string"}
+      }
+    }
+  },
+  "type": "object",
+  "required": ["schema_version", "run_metadata", "corpus", "cases", "metrics", "iteration_delta"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "run_metadata": {
+      "type": "object",
+      "required": ["run_id", "timestamp", "product_version", "git_head", "git_head_source", "worktree_state_id", "eval_corpus_version", "platform", "python_version", "provider", "model", "database_fixture_or_state_snapshot"],
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {"type": "string", "minLength": 1},
+        "timestamp": {"type": "string", "minLength": 1},
+        "product_version": {"type": "string", "minLength": 1},
+        "git_head": {"type": ["string", "null"]},
+        "git_head_source": {"type": "string", "minLength": 1},
+        "worktree_state_id": {"type": "string", "pattern": "^sha256-manifest-v1:[0-9a-f]{64}$"},
+        "eval_corpus_version": {"type": "string", "minLength": 1},
+        "platform": {"type": "string", "minLength": 1},
+        "python_version": {"type": "string", "minLength": 1},
+        "provider": {"type": "string"},
+        "model": {"type": "string"},
+        "database_fixture_or_state_snapshot": {"type": "string"}
+      }
+    },
+    "corpus": {
+      "type": "object",
+      "required": ["path", "schema_version", "version", "task_count"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string"},
+        "schema_version": {"type": "integer"},
+        "version": {"type": "string"},
+        "task_count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["eval_case_id", "parent_task_id", "name", "type", "priority", "scope", "counts_toward_acceptance_metrics", "result", "automated_result", "owner_uat_result", "owner_uat_required_for_case", "failure_layer", "root_cause_status", "wrong_action", "action_executed", "evidence", "notes"],
+        "additionalProperties": false,
+        "properties": {
+          "eval_case_id": {"type": "string", "minLength": 1},
+          "parent_task_id": {"type": ["string", "null"]},
+          "name": {"type": "string", "minLength": 1},
+          "type": {"type": "string", "minLength": 1},
+          "priority": {"type": "string", "minLength": 1},
+          "scope": {"enum": ["task", "scenario"]},
+          "counts_toward_acceptance_metrics": {"type": "boolean"},
+          "result": {"enum": ["PASS", "FAIL", "PARTIAL", "NOT_RUN", "WAITING_FOR_UAT"]},
+          "automated_result": {"enum": ["PASS", "FAIL", "PARTIAL", "NOT_RUN"]},
+          "owner_uat_result": {"enum": ["PASS", "FAIL", "PARTIAL", "NOT_RUN", "WAITING_FOR_UAT"]},
+          "owner_uat_required_for_case": {"type": "boolean"},
+          "failure_layer": {"type": ["string", "null"], "enum": [null, "Intent", "Context", "Authority", "Selection", "Tool", "Execution", "Readback", "Presentation", "Observability", "Eval Infrastructure"]},
+          "root_cause_status": {"type": ["string", "null"]},
+          "wrong_action": {"type": ["boolean", "null"]},
+          "action_executed": {"type": "boolean"},
+          "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+          "notes": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["denominator_rules", "result_counts", "scenario_result_counts", "acceptance_pass_rate", "core_acceptance_pass_rate", "p0_acceptance_pass_rate", "owner_uat_pass_rate", "wrong_action_rate", "engineering_regression_pass_rate", "failure_layer_counts", "scenario_failure_layer_counts"],
+      "additionalProperties": false,
+      "properties": {
+        "denominator_rules": {"type": "object", "additionalProperties": {"type": "string"}},
+        "result_counts": {"$ref": "#/$defs/resultCounts"},
+        "scenario_result_counts": {"$ref": "#/$defs/resultCounts"},
+        "acceptance_pass_rate": {"$ref": "#/$defs/rate"},
+        "core_acceptance_pass_rate": {"$ref": "#/$defs/rate"},
+        "p0_acceptance_pass_rate": {"$ref": "#/$defs/rate"},
+        "owner_uat_pass_rate": {"$ref": "#/$defs/rate"},
+        "wrong_action_rate": {"$ref": "#/$defs/rate"},
+        "engineering_regression_pass_rate": {"$ref": "#/$defs/rate"},
+        "failure_layer_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "scenario_failure_layer_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}
+      }
+    },
+    "iteration_delta": {
+      "type": "object",
+      "required": ["available"],
+      "additionalProperties": true,
+      "properties": {
+        "available": {"type": "boolean"},
+        "reason": {"type": "string"},
+        "current_pass_count": {"type": "integer", "minimum": 0},
+        "previous_pass_count": {"type": "integer", "minimum": 0},
+        "net_pass_delta": {"type": "integer"},
+        "current_pass_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "previous_pass_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "percentage_point_delta": {"type": "number"},
+        "fixed_failures_count": {"type": ["integer", "null"], "minimum": 0},
+        "new_failures_count": {"type": ["integer", "null"], "minimum": 0}
+      }
+    }
+  }
+}

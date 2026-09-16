@@ -1,0 +1,605 @@
+{
+  "schema_version": 1,
+  "run_metadata": {
+    "run_id": "P22-EVAL-04",
+    "timestamp": "2026-09-16T07:35:19.548643+00:00",
+    "product_version": "0.1.0",
+    "git_head": "ec55a033e7f51d9869a889c19d95c913c475ba53",
+    "git_head_source": "detected from repository",
+    "worktree_state_id": "sha256-manifest-v1:f36d3b1687b9eac333d1510b76a5db348adac6c1e62bc2d123e3bf7e05ac5467",
+    "eval_corpus_version": "p22-product-acceptance-v1",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "python_version": "3.12.13",
+    "provider": "N/A",
+    "model": "N/A",
+    "database_fixture_or_state_snapshot": "unavailable — quantitative aggregation only; no live database fixture was executed"
+  },
+  "corpus": {
+    "path": "eval/product_acceptance_v1.yaml",
+    "schema_version": 1,
+    "version": "p22-product-acceptance-v1",
+    "task_count": 15
+  },
+  "cases": [
+    {
+      "eval_case_id": "ACPT-REC-001",
+      "parent_task_id": null,
+      "name": "Scene-based Recommendation",
+      "type": "Core",
+      "priority": "P0",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "NOT_RUN",
+      "automated_result": "NOT_RUN",
+      "owner_uat_result": "NOT_RUN",
+      "owner_uat_required_for_case": false,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": null,
+      "action_executed": false,
+      "evidence": [],
+      "notes": [
+        "Not executed in this run; absence is not treated as failure."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-REC-002",
+      "parent_task_id": null,
+      "name": "Mood-based Recommendation",
+      "type": "Core",
+      "priority": "P0",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "NOT_RUN",
+      "automated_result": "NOT_RUN",
+      "owner_uat_result": "NOT_RUN",
+      "owner_uat_required_for_case": false,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": null,
+      "action_executed": false,
+      "evidence": [],
+      "notes": [
+        "Not executed in this run; absence is not treated as failure."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-REC-003",
+      "parent_task_id": null,
+      "name": "Similarity",
+      "type": "Core",
+      "priority": "P0",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "NOT_RUN",
+      "automated_result": "NOT_RUN",
+      "owner_uat_result": "NOT_RUN",
+      "owner_uat_required_for_case": false,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": null,
+      "action_executed": false,
+      "evidence": [],
+      "notes": [
+        "Not executed in this run; absence is not treated as failure."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-DIS-001",
+      "parent_task_id": null,
+      "name": "Discovery",
+      "type": "Core",
+      "priority": "P0",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "NOT_RUN",
+      "automated_result": "NOT_RUN",
+      "owner_uat_result": "NOT_RUN",
+      "owner_uat_required_for_case": false,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": null,
+      "action_executed": false,
+      "evidence": [],
+      "notes": [
+        "Not executed in this run; absence is not treated as failure."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-CTX-001",
+      "parent_task_id": null,
+      "name": "Current Intent vs Long-term Preference",
+      "type": "Core",
+      "priority": "P0",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "NOT_RUN",
+      "automated_result": "NOT_RUN",
+      "owner_uat_result": "NOT_RUN",
+      "owner_uat_required_for_case": false,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": null,
+      "action_executed": false,
+      "evidence": [],
+      "notes": [
+        "Not executed in this run; absence is not treated as failure."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-CTX-002",
+      "parent_task_id": null,
+      "name": "Continuous Adjustment",
+      "type": "Core",
+      "priority": "P0",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "NOT_RUN",
+      "automated_result": "NOT_RUN",
+      "owner_uat_result": "NOT_RUN",
+      "owner_uat_required_for_case": false,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": null,
+      "action_executed": false,
+      "evidence": [],
+      "notes": [
+        "Not executed in this run; absence is not treated as failure."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-CTX-003",
+      "parent_task_id": null,
+      "name": "Ambiguous Context",
+      "type": "Core",
+      "priority": "P0",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "NOT_RUN",
+      "automated_result": "NOT_RUN",
+      "owner_uat_result": "NOT_RUN",
+      "owner_uat_required_for_case": false,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": null,
+      "action_executed": false,
+      "evidence": [],
+      "notes": [
+        "Not executed in this run; absence is not treated as failure."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-FAIL-001",
+      "parent_task_id": null,
+      "name": "No Candidate",
+      "type": "Core",
+      "priority": "P0",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "NOT_RUN",
+      "automated_result": "NOT_RUN",
+      "owner_uat_result": "NOT_RUN",
+      "owner_uat_required_for_case": false,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": null,
+      "action_executed": false,
+      "evidence": [],
+      "notes": [
+        "Not executed in this run; absence is not treated as failure."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-PRE-001",
+      "parent_task_id": null,
+      "name": "Preview Unavailable",
+      "type": "Core",
+      "priority": "P0",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "NOT_RUN",
+      "automated_result": "NOT_RUN",
+      "owner_uat_result": "NOT_RUN",
+      "owner_uat_required_for_case": false,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": null,
+      "action_executed": false,
+      "evidence": [],
+      "notes": [
+        "Not executed in this run; absence is not treated as failure."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-PLAY-001",
+      "parent_task_id": null,
+      "name": "Playback Permission Failure",
+      "type": "Core",
+      "priority": "P0",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "NOT_RUN",
+      "automated_result": "NOT_RUN",
+      "owner_uat_result": "NOT_RUN",
+      "owner_uat_required_for_case": false,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": null,
+      "action_executed": false,
+      "evidence": [],
+      "notes": [
+        "Not executed in this run; absence is not treated as failure."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-FAIL-002",
+      "parent_task_id": null,
+      "name": "Tool / External Service Failure",
+      "type": "Core",
+      "priority": "P0",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "NOT_RUN",
+      "automated_result": "NOT_RUN",
+      "owner_uat_result": "NOT_RUN",
+      "owner_uat_required_for_case": false,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": null,
+      "action_executed": false,
+      "evidence": [],
+      "notes": [
+        "Not executed in this run; absence is not treated as failure."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-COLD-001",
+      "parent_task_id": null,
+      "name": "Cold Start / No Preference Data",
+      "type": "Core",
+      "priority": "P1",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "NOT_RUN",
+      "automated_result": "NOT_RUN",
+      "owner_uat_result": "NOT_RUN",
+      "owner_uat_required_for_case": false,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": null,
+      "action_executed": false,
+      "evidence": [],
+      "notes": [
+        "Not executed in this run; absence is not treated as failure."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-FB-001",
+      "parent_task_id": null,
+      "name": "Feedback Semantics",
+      "type": "Core",
+      "priority": "P0",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "NOT_RUN",
+      "automated_result": "NOT_RUN",
+      "owner_uat_result": "NOT_RUN",
+      "owner_uat_required_for_case": false,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": null,
+      "action_executed": false,
+      "evidence": [],
+      "notes": [
+        "Not executed in this run; absence is not treated as failure."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-ROUTE-001",
+      "parent_task_id": null,
+      "name": "Deterministic Playback Command",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "PASS",
+      "automated_result": "PASS",
+      "owner_uat_result": "PASS",
+      "owner_uat_required_for_case": true,
+      "failure_layer": null,
+      "root_cause_status": "resolved_and_verified",
+      "wrong_action": false,
+      "action_executed": true,
+      "evidence": [
+        {
+          "kind": "historical_regression",
+          "reference": "eval/runs/P22-S1.12-ROUTE-REGRESSION.md",
+          "notes": "Controlled route regression artifact; current project state separately records P22-S1.12 as VERIFIED."
+        },
+        {
+          "kind": "owner_current_state",
+          "reference": "P22-S1.12 VERIFIED",
+          "notes": "Owner-supplied current project baseline."
+        }
+      ],
+      "notes": [
+        "Closed playback quartet is treated as the current verified route baseline; this Eval slice does not re-execute Music.app."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-CTX-004",
+      "parent_task_id": null,
+      "name": "Conversational Continuation / Pending Action",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "task",
+      "counts_toward_acceptance_metrics": true,
+      "result": "FAIL",
+      "automated_result": "PARTIAL",
+      "owner_uat_result": "FAIL",
+      "owner_uat_required_for_case": true,
+      "failure_layer": "Authority",
+      "root_cause_status": "confirmed",
+      "wrong_action": false,
+      "action_executed": false,
+      "evidence": [
+        {
+          "kind": "owner_uat",
+          "reference": "current P22-EVAL-04 baseline",
+          "notes": "Named target continuation and decline+override pass; explicit-index Preview offer followed by 好的 fails by falling back to ordinary chat."
+        }
+      ],
+      "notes": [
+        "Current gap is incomplete OfferedAction producer coverage for chained explicit-index Preview offers; semantic understanding, target selection, and Preview capability resolution are reported as OK."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-CTX-004-A",
+      "parent_task_id": "ACPT-P22-CTX-004",
+      "name": "Named target acceptance",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "scenario",
+      "counts_toward_acceptance_metrics": false,
+      "result": "PASS",
+      "automated_result": "PASS",
+      "owner_uat_result": "PASS",
+      "owner_uat_required_for_case": true,
+      "failure_layer": null,
+      "root_cause_status": "verified",
+      "wrong_action": false,
+      "action_executed": true,
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/test_web_shell.py::test_s21_followup_structured_named_play_offer_arms_session_and_accepts_exact_target"
+        },
+        {
+          "kind": "test",
+          "reference": "tests/test_chat_session.py::test_s21_followup_structured_named_play_offer_arms_session_and_accepts_exact_target"
+        },
+        {
+          "kind": "owner_uat",
+          "reference": "播放地球最后一夜 → 开始试听",
+          "notes": "Owner reports exact same target Preview PASS."
+        }
+      ],
+      "notes": [
+        "Exact target identity is preserved across the pending offer continuation."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-CTX-004-B",
+      "parent_task_id": "ACPT-P22-CTX-004",
+      "name": "Acceptance synonym",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "scenario",
+      "counts_toward_acceptance_metrics": false,
+      "result": "WAITING_FOR_UAT",
+      "automated_result": "PASS",
+      "owner_uat_result": "WAITING_FOR_UAT",
+      "owner_uat_required_for_case": true,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": false,
+      "action_executed": true,
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/test_conversation_continuation.py::OfferedActionRegisterTest.test_generic_and_preview_specific_acceptance_consume_exact_offer"
+        },
+        {
+          "kind": "test",
+          "reference": "tests/test_web_shell.py::test_s21_followup_structured_named_play_offer_arms_session_and_accepts_exact_target",
+          "notes": "Web integration uses 可以 and exact canonical."
+        }
+      ],
+      "notes": [
+        "Automated evidence exists for 好的/可以/试听吧 semantics; no current Owner UAT result is claimed."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-CTX-004-C",
+      "parent_task_id": "ACPT-P22-CTX-004",
+      "name": "Decline",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "scenario",
+      "counts_toward_acceptance_metrics": false,
+      "result": "WAITING_FOR_UAT",
+      "automated_result": "PASS",
+      "owner_uat_result": "WAITING_FOR_UAT",
+      "owner_uat_required_for_case": true,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": null,
+      "action_executed": false,
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/test_conversation_continuation.py::OfferedActionRegisterTest.test_pure_decline_consumes_without_action"
+        },
+        {
+          "kind": "test",
+          "reference": "tests/test_web_shell.py::test_s21_decline_consumes_without_action_and_second_accept_cannot_replay"
+        }
+      ],
+      "notes": [
+        "Automated decline/consume behavior is covered; current Owner UAT is not recorded."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-CTX-004-D",
+      "parent_task_id": "ACPT-P22-CTX-004",
+      "name": "Decline plus explicit override",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "scenario",
+      "counts_toward_acceptance_metrics": false,
+      "result": "PASS",
+      "automated_result": "PASS",
+      "owner_uat_result": "PASS",
+      "owner_uat_required_for_case": true,
+      "failure_layer": null,
+      "root_cause_status": "verified",
+      "wrong_action": false,
+      "action_executed": false,
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/test_web_shell.py::test_s21_substantive_new_request_wins_and_expires_pending_offer"
+        },
+        {
+          "kind": "owner_uat",
+          "reference": "不用，播放第二首",
+          "notes": "Owner reports old offer expires and explicit new request wins."
+        }
+      ],
+      "notes": [
+        "The old pending offer is not consumed as a pure decline when a substantive new request is present."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-CTX-004-E",
+      "parent_task_id": "ACPT-P22-CTX-004",
+      "name": "Chained explicit-index Preview offer",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "scenario",
+      "counts_toward_acceptance_metrics": false,
+      "result": "FAIL",
+      "automated_result": "NOT_RUN",
+      "owner_uat_result": "FAIL",
+      "owner_uat_required_for_case": true,
+      "failure_layer": "Authority",
+      "root_cause_status": "confirmed",
+      "wrong_action": false,
+      "action_executed": false,
+      "evidence": [
+        {
+          "kind": "owner_uat",
+          "reference": "播放第二首 → Preview-only offer → 好的",
+          "notes": "Falls back to ordinary chat instead of previewing the exact second target."
+        }
+      ],
+      "notes": [
+        "No wrong target executed; failure is missing structured OfferedAction production for this chain."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-CTX-004-F",
+      "parent_task_id": "ACPT-P22-CTX-004",
+      "name": "Consumed offer replay protection",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "scenario",
+      "counts_toward_acceptance_metrics": false,
+      "result": "WAITING_FOR_UAT",
+      "automated_result": "PASS",
+      "owner_uat_result": "WAITING_FOR_UAT",
+      "owner_uat_required_for_case": true,
+      "failure_layer": null,
+      "root_cause_status": null,
+      "wrong_action": false,
+      "action_executed": true,
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/test_conversation_continuation.py::OfferedActionRegisterTest.test_accepted_offer_is_consumed_exactly_once"
+        },
+        {
+          "kind": "test",
+          "reference": "tests/test_web_shell.py::test_s21_failed_acceptance_is_consumed_and_never_replayed"
+        }
+      ],
+      "notes": [
+        "Automated consume-once behavior is verified; no current Owner UAT result is claimed."
+      ]
+    }
+  ],
+  "metrics": {
+    "denominator_rules": {
+      "acceptance": "Top-level task records with overall result PASS/FAIL/PARTIAL. NOT_RUN and WAITING_FOR_UAT are excluded; PARTIAL is in the denominator but not the PASS numerator.",
+      "owner_uat": "Top-level task records whose owner_uat_result is PASS/FAIL/PARTIAL. NOT_RUN and WAITING_FOR_UAT are excluded; PARTIAL is in the denominator but not the PASS numerator.",
+      "wrong_action": "All task/scenario records with action_executed=true and an explicit boolean wrong_action value. Missing/no-action outcomes are not silently counted as wrong-target executions.",
+      "engineering_regression": "passed tests / total tests only when a current regression count is explicitly supplied; otherwise N/A."
+    },
+    "result_counts": {
+      "PASS": 1,
+      "FAIL": 1,
+      "PARTIAL": 0,
+      "NOT_RUN": 13,
+      "WAITING_FOR_UAT": 0
+    },
+    "scenario_result_counts": {
+      "PASS": 2,
+      "FAIL": 1,
+      "PARTIAL": 0,
+      "NOT_RUN": 0,
+      "WAITING_FOR_UAT": 3
+    },
+    "acceptance_pass_rate": {
+      "numerator": 1,
+      "denominator": 2,
+      "rate": 0.5
+    },
+    "core_acceptance_pass_rate": {
+      "numerator": 0,
+      "denominator": 0,
+      "rate": null
+    },
+    "p0_acceptance_pass_rate": {
+      "numerator": 1,
+      "denominator": 2,
+      "rate": 0.5
+    },
+    "owner_uat_pass_rate": {
+      "numerator": 1,
+      "denominator": 2,
+      "rate": 0.5
+    },
+    "wrong_action_rate": {
+      "numerator": 0,
+      "denominator": 4,
+      "rate": 0.0
+    },
+    "engineering_regression_pass_rate": {
+      "numerator": 0,
+      "denominator": 0,
+      "rate": null,
+      "status": "NOT_RUN",
+      "notes": "P22-EVAL-04 records quantitative Product Eval evidence only; no current full engineering regression was executed in this run."
+    },
+    "failure_layer_counts": {
+      "Authority": 1
+    },
+    "scenario_failure_layer_counts": {
+      "Authority": 1
+    }
+  },
+  "iteration_delta": {
+    "available": false,
+    "reason": "previous run is not structured JSON; historical Markdown is not parsed or guessed"
+  }
+}

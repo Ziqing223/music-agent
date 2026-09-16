@@ -1,0 +1,52 @@
+{
+  "tracks": [
+    {
+      "id": "trk_11111111-1111-4111-8111-111111111111", "external_ids": {"apple_music_persistent_id": "SYNTH-TRACK-001"}, "name": "Synthetic Duet",
+      "artist_ids": ["art_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "art_bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"], "album_id": "alb_eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      "duration_ms": 210000, "genres": ["Synthetic Pop"], "track_number": 1, "disc_number": 1, "release_date": "2024-03-14", "composer": null,
+      "library_state": {"favorited": false, "disliked": false, "rating": 0, "play_count": 0, "skip_count": 0, "added_to_library_at": "2024-03-14T08:00:00+08:00", "last_played_at": null},
+      "agent_metadata": {"tags": []}
+    },
+    {
+      "id": "trk_22222222-2222-4222-8222-222222222222", "external_ids": {"apple_music_persistent_id": "SYNTH-TRACK-002"}, "name": "Synthetic Solo",
+      "artist_ids": ["art_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"], "album_id": "alb_ffffffff-ffff-4fff-8fff-ffffffffffff",
+      "duration_ms": 185000, "genres": [], "track_number": 2, "disc_number": 1, "release_date": "2023-11", "composer": "Example Composer",
+      "library_state": {"favorited": true, "disliked": false, "rating": 80, "play_count": 7, "skip_count": 1, "added_to_library_at": "2024-01-01T00:00:00Z", "last_played_at": "2025-06-01T12:30:00+08:00"},
+      "agent_metadata": {"tags": ["synthetic"]}
+    },
+    {
+      "id": "trk_33333333-3333-4333-8333-333333333333", "external_ids": {"apple_music_persistent_id": null}, "name": "Albumless Study",
+      "artist_ids": ["art_cccccccc-cccc-4ccc-8ccc-cccccccccccc"], "album_id": null,
+      "duration_ms": null, "genres": [], "track_number": null, "disc_number": null, "release_date": null, "composer": null,
+      "library_state": {"favorited": null, "disliked": null, "rating": null, "play_count": null, "skip_count": null, "added_to_library_at": null, "last_played_at": null},
+      "agent_metadata": {"tags": []}
+    },
+    {
+      "id": "trk_44444444-4444-4444-8444-444444444444", "external_ids": {"apple_music_persistent_id": "SYNTH-TRACK-004"}, "name": "Year Precision",
+      "artist_ids": ["art_bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"], "album_id": "alb_eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      "duration_ms": 240000, "genres": ["Synthetic Ambient"], "track_number": 3, "disc_number": 1, "release_date": "2024", "composer": null,
+      "library_state": {"favorited": false, "disliked": false, "rating": 100, "play_count": 1, "skip_count": 0, "added_to_library_at": "2024-12-31T23:59:59-05:00", "last_played_at": null},
+      "agent_metadata": {"tags": []}
+    }
+  ],
+  "artists": [
+    {"id": "art_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "external_ids": {"apple_music_persistent_id": "SYNTH-ARTIST-A"}, "name": "Artist Alpha"},
+    {"id": "art_bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "external_ids": {"apple_music_persistent_id": null}, "name": "Artist Beta"},
+    {"id": "art_cccccccc-cccc-4ccc-8ccc-cccccccccccc", "external_ids": {"apple_music_persistent_id": "SYNTH-ARTIST-C"}, "name": "Artist Gamma"}
+  ],
+  "albums": [
+    {"id": "alb_eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", "external_ids": {"apple_music_persistent_id": "SYNTH-ALBUM-E"}, "name": "Synthetic Collection", "artist_ids": ["art_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "art_bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"], "release_date": "2024"},
+    {"id": "alb_ffffffff-ffff-4fff-8fff-ffffffffffff", "external_ids": {"apple_music_persistent_id": null}, "name": "Synthetic Sessions", "artist_ids": ["art_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"], "release_date": "2023-11"}
+  ],
+  "playlists": [
+    {"id": "pl_55555555-5555-4555-8555-555555555555", "external_ids": {"apple_music_persistent_id": "SYNTH-PLAYLIST-1"}, "name": "Repeated Membership"},
+    {"id": "pl_66666666-6666-4666-8666-666666666666", "external_ids": {"apple_music_persistent_id": null}, "name": "Shared Track"}
+  ],
+  "playlist_memberships": [
+    {"id": "pm_77777777-7777-4777-8777-777777777771", "playlist_id": "pl_55555555-5555-4555-8555-555555555555", "track_id": "trk_11111111-1111-4111-8111-111111111111", "position": 0, "added_at": "2025-01-01T10:00:00+08:00"},
+    {"id": "pm_77777777-7777-4777-8777-777777777772", "playlist_id": "pl_55555555-5555-4555-8555-555555555555", "track_id": "trk_11111111-1111-4111-8111-111111111111", "position": 1, "added_at": "2025-01-01T10:01:00+08:00"},
+    {"id": "pm_77777777-7777-4777-8777-777777777773", "playlist_id": "pl_55555555-5555-4555-8555-555555555555", "track_id": "trk_22222222-2222-4222-8222-222222222222", "position": 2, "added_at": null},
+    {"id": "pm_77777777-7777-4777-8777-777777777774", "playlist_id": "pl_66666666-6666-4666-8666-666666666666", "track_id": "trk_11111111-1111-4111-8111-111111111111", "position": 0, "added_at": "2025-02-01T09:00:00Z"},
+    {"id": "pm_77777777-7777-4777-8777-777777777775", "playlist_id": "pl_66666666-6666-4666-8666-666666666666", "track_id": "trk_33333333-3333-4333-8333-333333333333", "position": 1, "added_at": null}
+  ]
+}

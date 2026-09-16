@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://music-agent.local/schema/canonical-music-model-0.1.0",
+  "title": "Canonical Music Model Synthetic Fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tracks", "artists", "albums", "playlists", "playlist_memberships"],
+  "properties": {
+    "tracks": {"type": "array", "items": {"$ref": "#/$defs/track"}},
+    "artists": {"type": "array", "items": {"$ref": "#/$defs/artist"}},
+    "albums": {"type": "array", "items": {"$ref": "#/$defs/album"}},
+    "playlists": {"type": "array", "items": {"$ref": "#/$defs/playlist"}},
+    "playlist_memberships": {"type": "array", "items": {"$ref": "#/$defs/playlistMembership"}}
+  },
+  "$defs": {
+    "externalIds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["apple_music_persistent_id"],
+      "properties": {
+        "apple_music_persistent_id": {"type": ["string", "null"], "minLength": 1},
+        "apple_music_catalog_id": {"type": ["string", "null"], "minLength": 1},
+        "isrc": {"type": ["string", "null"], "minLength": 1},
+        "itunes_store_id": {"type": ["string", "null"], "minLength": 1}
+      }
+    },
+    "releaseDate": {
+      "type": ["string", "null"],
+      "format": "canonical-release-date"
+    },
+    "timestamp": {
+      "type": ["string", "null"],
+      "format": "canonical-datetime"
+    },
+    "trackId": {"type": "string", "pattern": "^trk_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "artistId": {"type": "string", "pattern": "^art_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "albumId": {"type": "string", "pattern": "^alb_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "playlistId": {"type": "string", "pattern": "^pl_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "membershipId": {"type": "string", "pattern": "^pm_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "libraryState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["favorited", "disliked", "rating", "play_count", "skip_count", "added_to_library_at", "last_played_at"],
+      "properties": {
+        "favorited": {"type": ["boolean", "null"]},
+        "disliked": {"type": ["boolean", "null"]},
+        "rating": {"type": ["integer", "null"], "minimum": 0, "maximum": 100},
+        "play_count": {"type": ["integer", "null"], "minimum": 0},
+        "skip_count": {"type": ["integer", "null"], "minimum": 0},
+        "added_to_library_at": {"$ref": "#/$defs/timestamp"},
+        "last_played_at": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "agentMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tags"],
+      "properties": {"tags": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}}
+    },
+    "track": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "external_ids", "name", "artist_ids", "album_id", "duration_ms", "genres", "track_number", "disc_number", "release_date", "composer", "library_state", "agent_metadata"],
+      "properties": {
+        "id": {"$ref": "#/$defs/trackId"},
+        "external_ids": {"$ref": "#/$defs/externalIds"},
+        "name": {"type": "string", "minLength": 1},
+        "artist_ids": {"type": "array", "items": {"$ref": "#/$defs/artistId"}, "uniqueItems": true},
+        "album_id": {"oneOf": [{"$ref": "#/$defs/albumId"}, {"type": "null"}]},
+        "duration_ms": {"type": ["integer", "null"], "minimum": 0},
+        "genres": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+        "track_number": {"type": ["integer", "null"], "minimum": 1},
+        "disc_number": {"type": ["integer", "null"], "minimum": 1},
+        "release_date": {"$ref": "#/$defs/releaseDate"},
+        "composer": {"type": ["string", "null"], "minLength": 1},
+        "library_state": {"$ref": "#/$defs/libraryState"},
+        "agent_metadata": {"$ref": "#/$defs/agentMetadata"}
+      }
+    },
+    "artist": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "external_ids", "name"],
+      "properties": {"id": {"$ref": "#/$defs/artistId"}, "external_ids": {"$ref": "#/$defs/externalIds"}, "name": {"type": "string", "minLength": 1}}
+    },
+    "album": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "external_ids", "name", "artist_ids", "release_date"],
+      "properties": {
+        "id": {"$ref": "#/$defs/albumId"}, "external_ids": {"$ref": "#/$defs/externalIds"}, "name": {"type": "string", "minLength": 1},
+        "artist_ids": {"type": "array", "items": {"$ref": "#/$defs/artistId"}, "uniqueItems": true}, "release_date": {"$ref": "#/$defs/releaseDate"}
+      }
+    },
+    "playlist": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "external_ids", "name"],
+      "properties": {"id": {"$ref": "#/$defs/playlistId"}, "external_ids": {"$ref": "#/$defs/externalIds"}, "name": {"type": "string", "minLength": 1}}
+    },
+    "playlistMembership": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "playlist_id", "track_id", "position", "added_at"],
+      "properties": {
+        "id": {"$ref": "#/$defs/membershipId"}, "playlist_id": {"$ref": "#/$defs/playlistId"}, "track_id": {"$ref": "#/$defs/trackId"},
+        "position": {"type": "integer", "minimum": 0}, "added_at": {"$ref": "#/$defs/timestamp"}
+      }
+    }
+  }
+}

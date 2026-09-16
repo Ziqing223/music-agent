@@ -1,0 +1,2604 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>音乐助手</title>
+<style>
+  /* ---- UI v1 visual tokens: the ONLY place visual values live ----
+     Deep blue-black canvas, misty-purple + warm-pink ambient light, one
+     continuous glass surface. Edit these variables to retune the whole
+     shell; the markup and the backend must not change. */
+  :root {
+    --bg: #0b0c1a;
+    --bg-raise: #12142a;
+    --surface: rgba(255, 255, 255, 0.045);
+    --surface-soft: rgba(255, 255, 255, 0.035);
+    --line: rgba(255, 255, 255, 0.09);
+    --line-hair: rgba(255, 255, 255, 0.055);
+    --ink: #eceaf4;
+    --ink-soft: #a7a3bc;
+    /* P18-S3 (theme re-target): the faint tier stays visually tertiary but
+       keeps ~5.8:1 on the #0b0c1a canvas at 12px. */
+    --ink-faint: #8d8aa0;
+    --accent: #d3a1d7;          /* warm pink-purple: the one jump-link accent */
+    --accent-bright: #e0b6e6;   /* link hover: one gentle brighten step */
+    --accent-soft: rgba(183, 166, 232, 0.14);
+    --warm: #f0b7ac;            /* warm pink: buttons, kickers, spark */
+    --warm-soft: rgba(226, 150, 138, 0.13);
+    --danger: #e8a19b;
+    --danger-soft: rgba(232, 161, 155, 0.13);
+    --radius: 20px;
+    --radius-sm: 12px;
+    --radius-pill: 999px;
+    --gap: 14px;
+    --font: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --shadow: 0 1px 2px rgba(5, 5, 16, 0.5), 0 24px 60px rgba(5, 5, 16, 0.45);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* P18-S3: visible keyboard focus on every interactive element. */
+  button:focus-visible, textarea:focus-visible, a:focus-visible {
+    outline: 2px solid var(--warm); outline-offset: 2px;
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--font); font-size: 15px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    /* the page never grows with chat history -- scrolling happens inside
+       the panels, not on the body (P17 acceptance). The shell floats as a
+       centered standalone object instead of filling the browser. */
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* ---- ambient light field: fixed behind the shell, three soft sources.
+     One warm-pink band hugging the right edge (strongest top-right, easing
+     down), one misty purple from the lower left, one faint blue from above.
+     These layers breathe slowly; they hold no image, no waveform. ---- */
+  .ambient { position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: radial-gradient(120% 85% at 86% 6%, rgba(64, 46, 112, 0.72), rgba(13, 14, 28, 0) 56%),
+                radial-gradient(90% 72% at 3% 94%, rgba(44, 38, 96, 0.62), rgba(13, 14, 28, 0) 62%),
+                radial-gradient(95% 60% at 95% 98%, rgba(180, 100, 110, 0.3), rgba(13, 14, 28, 0) 60%),
+                linear-gradient(165deg, #0f1127 0%, #0b0c1a 52%, #100c22 100%);
+    overflow: hidden; }
+  .breathe { position: absolute; inset: -12%; filter: blur(80px); will-change: transform, opacity; }
+  .breathe-a {
+    background: radial-gradient(40% 30% at 82% 14%, rgba(228, 152, 140, 0.26), rgba(228, 152, 140, 0) 70%),
+                radial-gradient(44% 40% at 90% 84%, rgba(210, 130, 152, 0.24), rgba(210, 130, 152, 0) 72%);
+    animation: ambient-breathe 6.5s ease-in-out infinite;
+  }
+  .breathe-b {
+    background: radial-gradient(40% 40% at 16% 12%, rgba(98, 116, 196, 0.17), rgba(98, 116, 196, 0) 70%),
+                radial-gradient(44% 46% at 8% 90%, rgba(148, 120, 214, 0.28), rgba(148, 120, 214, 0) 70%);
+    animation: ambient-breathe 8.2s ease-in-out 1.4s infinite;
+  }
+  /* the interface is breathing, not the music: playing intensifies the
+     ambient slightly, paused calms it down, idle stays nearly still. */
+  body[data-play="playing"] .breathe-a { opacity: 1; animation-duration: 5.2s; }
+  body[data-play="playing"] .breathe-b { opacity: 1; animation-duration: 6.4s; }
+  body[data-play="paused"]  .breathe-a { opacity: 0.62; animation-duration: 9.5s; }
+  body[data-play="paused"]  .breathe-b { opacity: 0.7; animation-duration: 11s; }
+  body[data-play="idle"]    .breathe-a { opacity: 0.45; animation-duration: 12s; }
+  body[data-play="idle"]    .breathe-b { opacity: 0.55; animation-duration: 14s; }
+  /* the card's interior fog breathes with the same three-tiered tempo */
+  body[data-play="playing"] .shell::before { opacity: 1; animation-duration: 9s; }
+  body[data-play="paused"]  .shell::before { opacity: 0.92; animation-duration: 13s; }
+  body[data-play="idle"]    .shell::before { opacity: 0.88; animation-duration: 17s; }
+
+  /* ---- scaling model (P19-R5): exactly two layout modes.
+     > 520px: Main Player -- a FIXED 660x880 design canvas scaled as ONE
+     unit; <= 520px: Mini Player. There is NO intermediate responsive
+     layout. The stage holds the canvas's visual footprint:
+     width = min(660, vw-48, (vh-48)*0.75) == 660 * S, aspect 0.75. The
+     shell derives S from the stage width (100cqw / 660) and scales via a
+     transform -- its layout box stays 660x880, so no font, padding, gap
+     or coordinate anywhere inside ever reflows above 520px. ---- */
+  .viewport-stage {
+    position: relative; z-index: 1;
+    width: min(660px, calc(100vw - 48px), calc((100vh - 48px) * 0.75));
+    width: min(660px, calc(100vw - 48px), calc((100dvh - 48px) * 0.75));
+    aspect-ratio: 0.75;
+    container-type: inline-size;
+  }
+  /* one standalone desktop music object: 660px x 880px (aspect 0.75).
+     Coordinates inside the card are normalized (X 0-100%, Y 0-100%) and
+     expressed in cqi (1% of card width = 6.6px at any scale), so every
+     position below holds identically at every viewport above 520px. */
+  .shell {
+    position: absolute; left: 50%; top: 50%; z-index: 1;
+    margin: -440px 0 0 -330px;
+    width: 660px; height: 880px;
+    transform: scale(calc(100cqw / 660px));
+    transform-origin: center center;
+    container-type: inline-size;
+    /* P19-R6: pads were 4.2cqi/4cqi, but cqi resolves against the STAGE,
+       which shrinks with S -- so pads scaled faster than the canvas and
+       broke strict uniform ×S (spec S=0.8 example). Fixed canvas px keep
+       identical S=1 geometry (4.2% of 660 = 27.72 / 4% - 2px = 24.4, so
+       composer = 605.88 = 91.8% of the card, x = 28.7 + right edge 634.6)
+       and scale EXACTLY by S at smaller stages. */
+    padding: 0 24.4px 0 27.72px;
+    min-height: 0;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    background: linear-gradient(160deg, #0e1023 0%, #0a0c1e 52%, #0d0a1f 100%);
+    border: 1px solid rgba(255, 255, 255, 0.055);
+    border-radius: 30px;
+    box-shadow: var(--shadow);
+  }
+  /* interior fog, in card-normalized coordinates (X/Y = % of card W/H):
+     warm-pink hotspot centered at (91%, 67%) -- right above the composer's
+     right side -- with fast leftward decay (reaches ~55% X at most); main
+     purple field centered (82%, 35-45%) shaping the right half; the warmest
+     band hugs X 88-100% / Y 60-82% (composer right + right edge). The left
+     half (X 0-45%) stays deep blue-black with only the faintest cool
+     blue-purple breath -- NO pink may cross into it. Fog is fog: no neon,
+     no rings, no hard stops. */
+  .shell::before {
+    content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    border-radius: inherit;
+    background:
+      radial-gradient(88% 82% at 92% 62%, rgba(186, 106, 124, 0.13), rgba(186, 106, 124, 0) 78%),
+      radial-gradient(62% 58% at 82% 40%, rgba(106, 64, 126, 0.42), rgba(106, 64, 126, 0.12) 46%, rgba(106, 64, 126, 0) 74%),
+      radial-gradient(44% 30% at 97% 72%, rgba(228, 148, 160, 0.30), rgba(228, 148, 160, 0) 72%),
+      radial-gradient(62% 52% at 91% 67%, rgba(214, 120, 140, 0.48), rgba(214, 120, 140, 0.20) 30%, rgba(214, 120, 140, 0.05) 55%, rgba(214, 120, 140, 0) 76%),
+      radial-gradient(44% 34% at -6% 30%, rgba(58, 66, 150, 0.16), rgba(58, 66, 150, 0) 62%);
+    opacity: 0.9;
+    animation: shell-breathe 13s ease-in-out infinite;
+  }
+  /* directional edge reflections, NOT a uniform border: cool blue-purple
+     top + left, misty purple to warm pink down the right, bottom-right a
+     touch warmer than bottom-left -- all at very low opacity */
+  .shell::after {
+    content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    border-radius: inherit;
+    box-shadow: inset 0 1px 0 rgba(152, 142, 224, 0.10),
+                inset 1px 0 0 rgba(152, 142, 224, 0.12),
+                inset -1px 0 0 rgba(206, 148, 172, 0.13),
+                inset 0 -1px 0 rgba(228, 154, 166, 0.12),
+                inset -1px -10px 22px -10px rgba(214, 138, 152, 0.12);
+  }
+  .shell > * { position: relative; z-index: 1; }
+
+  /* v1 Default: the shell is a pure music/composer object -- the service
+     plumbing stays wired (mode label, quit handler, footer all still live
+     in the DOM/JS) but none of it reads as tool chrome. */
+  .topbar { display: none; }
+  .topbar .mode { font-size: 12px; color: var(--ink-faint); }
+  .topbar .spacer { flex: 1; }
+  .topbar button.quiet {
+    border: 0; background: none; color: var(--ink-faint); font-size: 12px;
+    cursor: pointer; padding: 4px 10px; border-radius: var(--radius-pill);
+    transition: color 0.18s ease, background 0.18s ease;
+  }
+  .topbar button.quiet:hover { background: var(--surface-soft); color: var(--ink-soft); }
+
+  .banner {
+    display: none; margin-top: 10px; padding: 10px 14px; border-radius: var(--radius-sm);
+    background: var(--danger-soft); color: var(--danger); font-size: 14px;
+    white-space: pre-wrap; border: 1px solid rgba(232, 161, 155, 0.22);
+  }
+  .banner.visible { display: block; }
+  .notice {
+    display: none; margin-top: 10px; padding: 8px 14px; border-radius: var(--radius-sm);
+    background: var(--warm-soft); color: var(--warm); font-size: 13px;
+    border: 1px solid rgba(240, 183, 172, 0.2);
+  }
+  .notice.visible { display: block; }
+
+  /* ---- player: the current music state is the strongest visual anchor.
+     One continuous bar, text-only: title left, transport right, no artwork,
+     no progress, no volume, nothing else. ---- */
+  /* Default geometry (card-normalized): the title's rendered top lands at
+     Y~8% and the artist's at Y~13%. 8% of card HEIGHT = 10.67% of card
+     width (aspect 0.75), minus ~7px of line-box leading above the caps.
+     align-items:center makes the controls group's center Y follow the
+     text block's center Y automatically (|| < 3px by box math). */
+  .player { display: flex; align-items: center; justify-content: space-between; gap: 0; margin-top: calc(10.67cqi - 7px); }
+  /* title text X~8%: content box starts at 4.2%, the JIS glyph + gap
+     consume 24px, this margin absorbs exactly the balance */
+  .player-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; margin-left: 0.18%; }
+  /* preview priority: while a preview sounds this block takes the title
+     spot of the formal track and carries the strongest contrast; the formal
+     track below reads secondary. Visibility stays runtime facts only. */
+  .preview-now {
+    display: none; align-items: flex-start; gap: 10px; padding: 6px 0 2px;
+  }
+  .preview-now.visible { display: flex; }
+  .preview-now .glyph {
+    flex-shrink: 0; color: var(--warm); font-size: 17px; line-height: 1.5;
+    padding: 2px 4px 0 0; user-select: none;
+  }
+  .preview-now .preview-meta { min-width: 0; flex: 1; }
+  .preview-now .kicker {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+    color: var(--warm); margin: 0 0 2px;
+  }
+  .preview-now .preview-name {
+    font-size: 19px; font-weight: 600; color: var(--ink); line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .preview-now .preview-sub { font-size: 12.5px; color: var(--ink-faint); margin-top: 2px; }
+  .preview-now.failed .kicker, .preview-now.failed .preview-sub { color: var(--danger); }
+  .player .now { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  /* P19-now: the note before the song title joins the same 24-unit mask
+     family (stroke 2.4, round caps/joins) -- replacing the font-dependent
+     14px Unicode glyph. Box 20x20 with a zero-font 40px strut line box:
+     the item's flex baseline falls 20px below the box top, so the box
+     spans [baseline-20, baseline] and the ink (centered by contain)
+     lands with its optical center on the CJK title's visual center
+     (baseline ~10px below ink center of a 27px CJK line). margin-right
+     -6px keeps the tuned 24px title offset (20 box + -6 + 10 gap) --
+     required arithmetically by the frozen title X. */
+  .player .now .glyph {
+    flex-shrink: 0; color: var(--ink-faint); user-select: none;
+    width: 20px; height: 20px; line-height: 40px;
+    font-size: 0; margin-right: -6px;
+    background-color: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M13.1 17.8 a3.3 2.9 0 1 0 -6.6 0 a3.3 2.9 0 1 0 6.6 0 M12.9 14.9 L12.9 1.9 M12.9 1.9 c2.5 0.8 3.5 2.0 3.8 4.4'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M13.1 17.8 a3.3 2.9 0 1 0 -6.6 0 a3.3 2.9 0 1 0 6.6 0 M12.9 14.9 L12.9 1.9 M12.9 1.9 c2.5 0.8 3.5 2.0 3.8 4.4'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  .player .now-meta { min-width: 0; flex: 1; }
+  .player .track {
+    font-size: 27px; font-weight: 600; line-height: 1.25; letter-spacing: 0.004em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .player .artist {
+    font-size: 14px; color: #777da1; margin-top: 14px; line-height: 1.5;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .player .album {
+    /* v1 Default: Now Playing shows title + artist only. The album line is
+       still projected/filled by the backend -- just not displayed here. */
+    display: none;
+    font-size: 12px; color: var(--ink-faint); margin-top: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* formal track reads secondary while a preview holds priority */
+  .player .now.suspended .track,
+  .player .now.suspended .artist,
+  .player .now.suspended .album { color: var(--ink-faint); opacity: 0.85; }
+  .player .note { font-size: 12.5px; color: var(--ink-faint); margin-top: 6px; }
+  .player .note:empty { display: none; }
+  .player .idle {
+    color: var(--ink-soft); font-size: 14px; padding: 6px 0;
+  }
+  /* P19-Default: transport glyphs float directly in the environment -- no
+     circular containers, no plates, no borders. Horizontal targets (X of
+     card width): prev center ~67%, play ~78%, next ~89% -> fixed glyph
+     widths 20/24/20px with a 52px gap give 66.8/78.0/89.2% at 660px, and
+     margin-right 5.74% parks the group ~9.3% from the card's right edge.
+     Glyph heights vs the song title's cap (~19.4px at 27px): prev/next
+     19px font (~0.75x), play 27px font (~1.0-1.05x) -- the clearly bigger
+     warm accent. All three share ONE flex container, align-items:center. */
+  .controls { display: flex; gap: 52px; flex-wrap: wrap; flex-shrink: 0; align-items: center; padding-top: 0; margin-right: 5.74%; }
+  .controls button {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 0; min-height: 0; padding: 0; height: 28px;
+    border: 0; border-radius: 0; background: none;
+    color: var(--ink-soft); opacity: 0.92; font: inherit; font-size: 0; cursor: pointer;
+    transition: color 0.2s ease, transform 0.18s ease-out, filter 0.3s ease, opacity 0.2s ease;
+  }
+  /* P19-F1: transport glyphs are controlled local SVG-mask geometry on a
+     shared 24-unit design grid -- prev/next are skip-back/skip-forward
+     bar|triangle forms stroked at 2.4 with round caps/joins, play/pause
+     filled warm (play ink 24u tall, pause ink 19u -- two 4.2u rounded
+     bars with a 5u gap -- so play stays dominant) -- nothing depends on
+     Unicode fallback fonts. The ::before box is a flex item centered
+     inside each fixed-size button box; button widths 20/24/20 and the
+     52px gap are untouched. */
+  .controls button::before {
+    display: block; content: "";
+    width: 24px; height: 24px;
+    background-color: currentColor;
+  }
+  #prev { width: 20px; }
+  #next { width: 20px; }
+  #prev::before {
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.8 5.2 V18.8 M18.4 6.4 L9 12 L18.4 17.6 Z'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.8 5.2 V18.8 M18.4 6.4 L9 12 L18.4 17.6 Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  #next::before {
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18.2 5.2 V18.8 M5.6 6.4 L15 12 L5.6 17.6 Z'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18.2 5.2 V18.8 M5.6 6.4 L15 12 L5.6 17.6 Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  /* the play/pause glyph is the only warm accent -- a floating icon, not
+     a filled button container */
+  #play-pause { width: 24px; color: #d9a8c0; opacity: 1; }
+  #play-pause::before {
+    width: 24px; height: 28px;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 28' fill='%23000'%3E%3Cpath d='M2.4 2 L21.6 14 L2.4 26 Z'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 28' fill='%23000'%3E%3Cpath d='M2.4 2 L21.6 14 L2.4 26 Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  body[data-play="playing"] #play-pause::before {
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M6.8 2.5 h1.4 a1.4 1.4 0 0 1 1.4 1.4 v16.2 a1.4 1.4 0 0 1 -1.4 1.4 h-1.4 a1.4 1.4 0 0 1 -1.4 -1.4 v-16.2 a1.4 1.4 0 0 1 1.4 -1.4 Z M16 2.5 h1.4 a1.4 1.4 0 0 1 1.4 1.4 v16.2 a1.4 1.4 0 0 1 -1.4 1.4 h-1.4 a1.4 1.4 0 0 1 -1.4 -1.4 v-16.2 a1.4 1.4 0 0 1 1.4 -1.4 Z'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M6.8 2.5 h1.4 a1.4 1.4 0 0 1 1.4 1.4 v16.2 a1.4 1.4 0 0 1 -1.4 1.4 h-1.4 a1.4 1.4 0 0 1 -1.4 -1.4 v-16.2 a1.4 1.4 0 0 1 1.4 -1.4 Z M16 2.5 h1.4 a1.4 1.4 0 0 1 1.4 1.4 v16.2 a1.4 1.4 0 0 1 -1.4 1.4 h-1.4 a1.4 1.4 0 0 1 -1.4 -1.4 v-16.2 a1.4 1.4 0 0 1 1.4 -1.4 Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  body[data-play="idle"] #play-pause::before {
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 28' fill='%23000'%3E%3Cpath d='M2.4 2 L21.6 14 L2.4 26 Z'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 28' fill='%23000'%3E%3Cpath d='M2.4 2 L21.6 14 L2.4 26 Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  .controls button:hover:not(:disabled) { color: var(--ink); opacity: 1; transform: translateY(-1px); }
+  #play-pause:hover:not(:disabled) { filter: drop-shadow(0 0 16px rgba(217, 168, 192, 0.5)); }
+  /* P19-T11d: transport press -- settle 1px into the plate at 0.95, play
+     gets its warm-pink glow; ~90ms down, ~180ms ease-out release. */
+  .controls button:active:not(:disabled) {
+    transform: translateY(1px) scale(0.95); color: var(--ink);
+    transition: transform 0.09s ease, color 0.12s ease, filter 0.12s ease;
+  }
+  #play-pause:active:not(:disabled) { filter: drop-shadow(0 0 10px rgba(217, 168, 192, 0.6)); }
+  .controls button:disabled { opacity: 0.35; cursor: default; }
+
+  /* ---- stage: greeting / conversation / thinking share one slot ----
+     Views stack in one grid cell and crossfade between each other; the
+     layout never jumps between states. The panel itself never pins a
+     growth floor: it shrinks inside the shell and scrolls internally. */
+  #chat-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .stage-grid { flex: 1; min-height: 0; display: grid; }
+  .stage-grid > .view { grid-area: 1 / 1; display: flex; flex-direction: column; }
+  .view { min-height: 0; opacity: 1; transform: translateY(0); transition: opacity 0.45s ease, transform 0.45s ease; }
+  .view.off { opacity: 0; transform: translateY(8px); pointer-events: none; }
+
+  /* P19-Default R4: the greeting's hello top lands at Y~41% (47px push +
+     the flex-centering of the remaining stage space), subtitle top ~48%,
+     both on the X~8% text baseline of the title/artist. */
+  #view-greet { align-items: flex-start; justify-content: center; padding: 47px 0 0; margin-left: 4.14%; }
+  #view-greet .hello {
+    font-size: 35px; font-weight: 500; letter-spacing: 0.01em; color: #bfa0b2;
+    line-height: 1.25; margin-bottom: 11px; white-space: nowrap;
+  }
+  #view-greet .hello .spark { color: #d9a8c0; font-size: 26px; vertical-align: 4px; }
+  #view-greet .hello-sub { font-size: 22px; color: #ae8ea1; line-height: 1.3; white-space: nowrap; }
+
+  /* P19-T17: the bottom safe area left the shared scroller and belongs to
+     the recommendation DETAIL face alone (#rec-detail below). Its geometry
+     is unchanged (scrollport bottom ~10px above the composer top +
+     composer 78px = 88px band; padding = band + 12px rest), but padding
+     below content now only exists for scrollable detail rows -- an
+     ordinary conversation keeps just its breathing padding and never
+     shows a blank band above the composer. */
+  #view-convo { overflow-y: auto; min-height: 0; padding: 30px 2px 8px; }
+  /* P19-T9: the result region scrolls inside itself; the native thick
+     scrollbar is visually hidden on both engines while wheel and keyboard
+     scrolling keep working -- the fixed 660x880 shell never grows. */
+  #view-convo { scrollbar-width: none; }
+  #view-convo::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  /* P19-T17: the recommendation detail face takes over #view-convo's whole
+     device -- same window, same stage, never a third view mode. The
+     .detail-open gate hides the conversation (archived turns, live pair,
+     every trace) without destroying a node; the JS remembers the exact
+     scrollTop and puts it back on return. The face carries the re-homed
+     bottom safe area, so an N-row batch always scrolls fully above the
+     composer while the conversation keeps zero blank. */
+  #rec-detail { padding: 0 2px 100px; }
+  #rec-detail.off { display: none; }
+  #view-convo.detail-open > .convo-turns,
+  #view-convo.detail-open > .convo-user,
+  #view-convo.detail-open > .convo-reply,
+  #view-convo.detail-open > #recs { display: none; }
+  /* one quiet lead line at the top of the detail face: the batch's own
+     trace label (turn-derived, never the whole request) */
+  .detail-lead { font-size: 15px; color: var(--ink-soft); padding: 2px; margin-bottom: 16px; }
+  /* P19-T17-C: pure text hierarchy for the user line -- it is text, not
+     a plate. The .msg bubble shorthand (painted by the hidden .messages
+     buffer face) must never reach the stage: no background, no padding,
+     no radius, full column width. One font tier up (13.5 -> 15px) and
+     one quiet tier down (--ink-soft -> --ink-faint keeps the user line
+     decisively weaker than the AI reply). */
+  .convo-user {
+    font-size: 15px; color: var(--ink-faint); margin-bottom: 14px; padding: 0 2px;
+    overflow-wrap: break-word;
+  }
+  /* P19-T17-C: the anchor id lifts specificity above the later .msg.user
+     plate rule (0,2,0) regardless of stylesheet order -- otherwise the
+     base plate's background/color would keep winning the cascade on the
+     visible conversation face. Plain text only: no plate, no radius,
+     no padding, full width, faintest ink. */
+  #view-convo .convo-user [class^="msg"] {
+    background: none; border-radius: 0; padding: 0; max-width: 100%;
+    color: var(--ink-faint);
+  }
+  .convo-reply [class^="msg"] { background: none; }
+  /* P19-T12: prose surface cleanup -- the later .msg.assistant shorthand
+     (visible in the hidden .messages buffer) would otherwise paint the
+     stage prose panel; 0,3,0 beats 0,2,0 here so visible replies stay
+     clean text on the ambient surface: no panel, no card, no rectangle. */
+  .convo-reply .msg.assistant { margin-left: 0; padding: 0; align-self: stretch; border-radius: 0; background: none; }
+  /* P19-T17-C: the AI reply steps one full tier up (16.5 -> 18px), keeps
+     its comfortable 1.8 line-height, and warms one notch -- #f5eee8 is
+     brighter and fractionally warmer than the cool --ink, the same one-
+     family text, no weight or family change. */
+  .convo-reply .msg.assistant.rendered { font-size: 18px; line-height: 1.8; color: #f5eee8; }
+  /* P19-T9: the recommendation lead -- one quiet verbatim sentence above
+     the rows. Text only (textContent channel), so it can never carry tags. */
+  .convo-reply .msg.assistant.lead { font-size: 16.5px; line-height: 1.7; color: var(--ink-soft); white-space: normal; }
+  .convo-reply .msg.rendered p { margin: 0 0 8px; }
+  .convo-reply .msg.rendered p:last-child { margin-bottom: 0; }
+  .convo-reply .msg.rendered ul, .convo-reply .msg.rendered ol { margin: 0 0 8px; padding-left: 20px; }
+  .convo-reply .msg.rendered ul:last-child, .convo-reply .msg.rendered ol:last-child { margin-bottom: 0; }
+  .convo-reply .msg.rendered li { margin: 3px 0; }
+  .convo-reply .msg.rendered code { background: var(--accent-soft); border-radius: 4px; padding: 1px 5px; font-size: 13.5px; overflow-wrap: anywhere; }
+  .convo-reply .msg.rendered a { color: var(--accent); }
+  .convo-reply .msg.rendered a:hover { color: var(--accent-bright); }
+  .convo-reply .msg.rendered a:visited { color: var(--accent); }
+  /* P19-T16 session turns: every completed turn archives into an ordered
+     block -- user line, AI reply, and (once its batch is no longer the
+     newest) that batch's trace line -- so the conversation keeps its true
+     order: user K1 / reply K1 / trace K1, then K2, K3... The members
+     reuse the exact .convo-user/.convo-reply treatment of the live pair,
+     so the hierarchy never changes: user weakest, AI lead brighter, the
+     quiet trace faintest. */
+  .convo-turns .convo-turn { margin-bottom: 16px; }
+  .convo-turns .turn-trace { margin-top: 4px; }
+
+
+
+
+
+
+  /* thinking: the current request, held by a THINKING CLOUD -- the
+     fog below is the volume (eight overlapping soft blobs, densest
+     under the words, dissolving to nothing at every edge: no boundary,
+     no ring, no rim) and the WAAPI particle engine at the end of this
+     file is the life: ~156 addressable particles, seeded deterministic
+     layout, local CW/CCW flow tendencies around three centers, each
+     particle on its own phase and brightness. No rotation, no orbit,
+     no re-mix timer (S3b deferred). Engine doc: P19-T2-PARTICLES-DESIGN.md. */
+
+  #view-thinking { align-items: center; justify-content: center; text-align: center; padding: 16px 0; }
+  .thinking-request {
+    max-width: 520px; font-size: 17px; line-height: 1.7; color: var(--ink);
+    overflow-wrap: break-word; margin-bottom: 10px;
+  }
+  /* the cloud's canvas: a 500px square that every layer fills, pulled
+     22px up behind the request (negative margin) and dropped to z-index
+     -1 -- P19-T11b moved the whole field DOWN 63px (was -85px): the
+     particle circle's visible top arc (field_y + 30) now clears the
+     request's bottom edge by ~18px (box-measured; the glyphs sit a few
+     px above the box bottom, so the eye sees ~20-22px of air). No other
+     Thinking rule changed -- the mass, fog and particles are untouched. */
+  .thinking-field { position: relative; z-index: -1; width: 500px; height: 500px; margin-top: -22px; }
+  .field { position: absolute; inset: 0; will-change: transform, opacity; }
+  /* f4: the fog -- the cloud itself. Eight overlapping large soft
+     blobs, densest in the upper-center heart under the words, thinning
+     toward every edge until it is gone: no contour anywhere. One
+     warm-pink breath at the right shoulder answers the ambient.
+     The whole mass only very slowly drifts (a few px, slight alpha
+     ebb), out of phase with every particle underneath. */
+  .field.f4 {
+    background:
+      radial-gradient(34% 26% at 47% 30%, rgba(166,146,232,0.20), rgba(166,146,232,0) 100%),
+      radial-gradient(42% 38% at 47% 47%, rgba(126,106,200,0.16), rgba(126,106,200,0) 100%),
+      radial-gradient(38% 34% at 55% 54%, rgba(116,98,190,0.14), rgba(116,98,190,0) 100%),
+      radial-gradient(30% 34% at 36% 48%, rgba(120,102,194,0.12), rgba(120,102,194,0) 100%),
+      radial-gradient(26% 30% at 64% 46%, rgba(116,100,190,0.11), rgba(116,100,190,0) 100%),
+      radial-gradient(46% 20% at 50% 63%, rgba(102,88,176,0.10), rgba(102,88,176,0) 100%),
+      radial-gradient(20% 17% at 49% 41%, rgba(152,134,222,0.13), rgba(152,134,222,0) 100%),
+      radial-gradient(18% 16% at 63% 33%, rgba(222,172,192,0.14), rgba(222,172,192,0) 100%);
+    background-repeat: no-repeat;
+    animation: think-cloud-drift 52s ease-in-out infinite;
+  }
+  /* thinking-particles: the engine-owned layer. The WAAPI engine
+     (bottom of this file) appends .tp nodes here only while Thinking is
+     active; the layer itself is inert and empty in every other state. */
+  .thinking-particles { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  .thinking-particles .tp {
+    position: absolute; border-radius: 50%; will-change: transform, opacity;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    /* reduced motion is JS-owned: the engine composes a static field and
+       these one-shot fades are the only motion it ever gets there */
+    .thinking-particles .tp { transition: opacity 400ms ease; }
+  }
+
+  /* the full conversation history stays a hidden buffer -- the stage shows
+     the latest exchange only; scrolling happens inside the convo view. */
+  .messages {
+    flex: 1; min-height: 0; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .stage .messages { display: none; }
+  .msg { max-width: 88%; border-radius: var(--radius-sm); padding: 9px 12px; overflow-wrap: break-word; }
+  .msg.user { align-self: flex-end; background: var(--accent-soft); color: var(--ink); white-space: pre-wrap; }
+  .msg.assistant { align-self: flex-start; background: var(--surface-soft); white-space: pre-wrap; }
+  .msg.assistant.rendered { white-space: normal; line-height: 1.65; }
+  .msg.rendered p { margin: 0 0 6px; }
+  .msg.rendered p:last-child { margin-bottom: 0; }
+  .msg.rendered ul, .msg.rendered ol { margin: 0 0 6px; padding-left: 20px; }
+  .msg.rendered ul:last-child, .msg.rendered ol:last-child { margin-bottom: 0; }
+  .msg.rendered li { margin: 3px 0; }
+  .msg.rendered hr { border: 0; border-top: 1px solid var(--line-hair); margin: 8px 0; }
+  .msg.rendered code { background: var(--accent-soft); border-radius: 4px; padding: 1px 5px; font-size: 13px; overflow-wrap: anywhere; }
+  .msg.rendered a { color: var(--accent); }
+  .msg.rendered a:hover { color: var(--accent-bright); }
+  .msg.rendered a:visited { color: var(--accent); }
+  /* ---- recommendation: compact rows attached to the lead, not a card
+     deck (P19-T9). Song first, quiet artist, actions as small light pills
+     on the right; rows separated by the faintest hairline only. No cover
+     slot, no artwork: a row is exactly title / artist / actions. ---- */
+  #recs { margin-top: 22px; }
+  #recs.off { display: none; }
+  .cards { display: flex; flex-direction: column; gap: 2px; }
+  /* P19-T12-Fix01 state projection: the folded conversation face hides the
+     rows through the same .off contract every other result face uses --
+     renderTrace adds "off" to #cards and THIS rule is the missing half of
+     that contract (without it the rows stayed on screen and the back
+     chevron looked broken). #recs stays visible as the trace's carrier,
+     so only the rows collapse; #recs.off below still hides the whole
+     region when there is no batch at all. */
+  .cards.off { display: none; }
+  .card {
+    border: 0; border-top: 1px solid var(--line-hair);
+    border-radius: 0; padding: 11px 2px; display: flex; align-items: center; gap: 12px;
+    transition: background 0.18s ease;
+  }
+  .card:first-child { border-top: 0; }
+  .card:hover { background: var(--surface-soft); border-radius: var(--radius-sm); }
+  .card .meta { min-width: 0; flex: 1; }
+  .card .name {
+    font-size: 15px; font-weight: 600; line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .card .artist { font-size: 12.5px; color: var(--ink-soft); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; }
+  .card .actions button {
+    border: 1px solid var(--line); background: var(--surface-soft); color: var(--ink-soft);
+    border-radius: var(--radius-pill); padding: 4px 12px; font: inherit; font-size: 12px;
+    cursor: pointer; white-space: nowrap;
+    transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease, transform 0.18s ease-out;
+  }
+  .card .actions button:hover:not(:disabled) {
+    color: var(--warm); border-color: rgba(240, 183, 172, 0.4); background: var(--warm-soft); transform: translateY(-1px);
+  }
+  /* P19-T11d: pill press -- pushed 1px into the glass (deeper inset),
+     0.97 max; primary preview/play add a faint warm-pink bloom, ~90ms
+     down, ~180ms ease-out release. */
+  .card .actions button:active:not(:disabled) {
+    transform: translateY(1px) scale(0.97);
+    color: var(--warm); border-color: rgba(240, 183, 172, 0.5); background: var(--warm-soft);
+    box-shadow: inset 0 1px 4px rgba(10, 8, 26, 0.3);
+    transition: transform 0.09s ease, background 0.12s ease, color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  }
+  .card .actions button.primary:active:not(:disabled) {
+    box-shadow: inset 0 1px 4px rgba(10, 8, 26, 0.28), 0 0 12px rgba(240, 183, 172, 0.35);
+  }
+  .card .actions button:disabled { opacity: 0.4; cursor: default; }
+  .card .actions .primary { background: var(--warm-soft); border-color: rgba(240, 183, 172, 0.4); color: var(--warm); }
+  .card .actions button.open-am::after { content: " ↗"; font-size: 11px; }
+  /* P19-T17-R1: the Apple Music pill is the one jump link among the card
+     actions -- rest state carries the shared link accent (its 播放/试听
+     siblings keep their own rest colors), hover takes a single gentle
+     brighten step. Disabled/pending keep the shared opacity semantics. */
+  .card .actions button.open-am { color: var(--accent); }
+  .card .actions button.open-am:hover:not(:disabled) { color: var(--accent-bright); }
+  .card .unavailable { font-size: 12px; color: var(--ink-faint); }
+  .empty { color: var(--ink-soft); font-size: 13.5px; padding: 4px 0; }
+
+  /* stagger reveal: the rows fade/settle in one at a time, ~70ms apart --
+     a gentle settle, never a springy bounce. */
+  .card.reveal {
+    animation: card-in 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  }
+
+  /* session trace: the collapsed memory of a shown batch. Two quiet lines
+     (the reply above, this line attached below it), clickable to restore
+     the same batch -- recomputed nowhere, never refetched.
+     P19-T13: the target hugs the text -- fit-content + 4px 6px padding,
+     never the whole row; hover/active only near the words.
+     P19-T17-R2-B: the trace is a genuine jump link (its click hands the
+     stage to that batch's detail face) -- it carries the one link accent:
+     rest --accent, hover the single --accent-bright step. Geometry, font
+     and the 2px hover nudge stay byte-identical. */
+  .rec-trace {
+    border: 0; background: none; padding: 4px 6px; text-align: left;
+    font: inherit; font-size: 13px; color: var(--accent); cursor: pointer;
+    display: inline-block; width: fit-content;
+    transition: color 0.18s ease, transform 0.18s ease, opacity 0.18s ease;
+  }
+  .rec-trace:hover { color: var(--accent-bright); transform: translateX(2px); }
+  /* P19-T11d: text-style action -- press = opacity/brightness only, no
+     big motion (keeps the 2px hover nudge, ≤0.97 spirit). */
+  .rec-trace:active { opacity: 0.7; transition: opacity 0.12s ease; }
+  .rec-trace.off { display: none; }
+  .rec-trace .glyph { margin-right: 6px; opacity: 0.7; }
+  /* P19-T14-D: the older session traces keep the same text-hugging
+     hitbox (T13 fit-content + 4px 6px padding transfers unchanged) but
+     each owns its line -- block + shrink-to-fit width, 6px between
+     turns. The newest line (static #rec-trace) is alone in the block
+     flow, unaffected. */
+  .rec-trace-old .rec-trace { display: block; margin-top: 6px; }
+  .rec-trace-old .rec-trace:first-child { margin-top: 0; }
+
+  /* P19-T12: the light back chevron -- upper navigation layer, owned by
+     the conversation view directly below the player block. No container,
+     no plate, no pill, still the same pure folds-to-trace behavior and
+     the same restrained press language as T11c/R3.
+     P19-T13: the hitbox is tightened to the glyph. Real-browser measurements
+     recorded the old display:block button at ~370x22 across the whole
+     column -- the stage grid's flex column was stretching it on the
+     cross axis. It is now a fixed 32x32 target: inline-flex, centered
+     glyph, padding 0, and align-self:flex-start so the parent can never
+     widen it again. The T12 margin pin is untouched, so the box keeps
+     its exact origin and left alignment; the centered glyph settles a
+     few px further right inside the same visual slot. The ~370px-wide
+     dead band right of the ‹ is gone -- clicking there must miss. */
+  .rec-back {
+    border: 0; background: none; margin: -13px 0 12px 20px; padding: 0;
+    font: inherit; font-size: 26px; line-height: 1; color: var(--ink-faint);
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; align-self: flex-start;
+    transition: color 0.18s ease, transform 0.18s ease-out, opacity 0.18s ease;
+  }
+  .rec-back:hover { color: var(--warm); transform: translateX(-1px); }
+  /* P19-T12-Fix02-R3: press feedback must never touch hit geometry.
+     Owner browser evidence: the old scale(0.94) press shrank the whole
+     wide hitbox after pointerdown and slid the left-edge glyph out from
+     under the cursor (mouseup/click retargeted to #view-convo, handler
+     never fired). Press is opacity/color only -- the hitbox never moves
+     and never scales. The 1px hover nudge stays: it cannot carry the
+     region away from a pointer resting over a left-edge glyph. */
+  .rec-back:active { color: var(--warm); opacity: 0.7; transition: color 0.12s ease, opacity 0.12s ease; }
+  .rec-back.off { display: none; }
+
+  /* ---- composer: one large capsule. Field and send share a single rounded
+     glass surface with the warm arrow floating inside its right edge. The
+     <button> stays the exact same sendBtn element and event path -- only
+     the visual container changed. ---- */
+  /* P19-Default: one tall rounded capsule, deep blue-black glass with the
+     very lightest purple-to-pink gradient and a hair-thin border. Focus
+     brightens it only slightly -- never a neon edge. The send action stays
+     the same #send button and event path; only the glyph became a warm
+     chevron floating inside the right edge, no plate behind it. */
+  .composer { position: relative; display: flex; align-items: stretch; margin-top: 18px; }
+  .composer textarea {
+    flex: 1; resize: none;
+    border: 1px solid rgba(196, 160, 232, 0.16);
+    border-radius: 34px;
+    /* P19-R6 + P19-T11a: the outer box is pinned to EXACTLY 78px
+       (border-box: fixed height, so rows=2 / padding can never auto-grow
+       it; T11 slimmed 92 -> 78). 22px of top padding centers the single
+       31.5px line box: glyph center = 1 border + 22 + 15.75 = 38.75 ≈
+       39px = the 78px box's center. white-space: nowrap keeps the visual
+       line single (typed multiline VALUES still send unchanged). */
+    padding: 22px 96px 22px 28px;
+    font: inherit; font-size: 21px; line-height: 1.5;
+    white-space: nowrap;
+    background: linear-gradient(135deg, rgba(120, 104, 194, 0.10), rgba(28, 24, 54, 0.44) 45%, rgba(214, 138, 158, 0.11));
+    color: var(--ink); height: 78px;
+    outline: none;
+    box-shadow: inset 0 0 0 1px rgba(214, 138, 158, 0.05), inset 0 0 32px rgba(22, 18, 42, 0.55);
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .composer textarea::placeholder { color: #bd90a9; white-space: nowrap; }
+  .composer textarea:hover { border-color: rgba(214, 138, 158, 0.24); }
+  .composer textarea:focus {
+    border-color: rgba(214, 138, 158, 0.32);
+    box-shadow: 0 0 24px rgba(226, 150, 138, 0.08), inset 0 0 0 1px rgba(214, 138, 158, 0.08), inset 0 0 32px rgba(22, 18, 42, 0.5);
+  }
+  .composer button {
+    position: absolute; right: 24px; top: 50%; transform: translateY(-50%);
+    width: 44px; height: 44px; padding: 0;
+    border: 0; border-radius: 0;
+    background: none; box-shadow: none;
+    color: var(--warm); font: inherit; font-size: 0; cursor: pointer;
+    filter: drop-shadow(0 0 5px rgba(240, 184, 192, 0.5));
+    transition: filter 0.25s ease, transform 0.18s ease-out, opacity 0.2s ease;
+  }
+  /* true right-pointing send chevron (M8 5 L16 12 L8 19, round caps),
+     warm pink with a faint glow, sitting inside the capsule's right edge
+     at X~89% / composer-center-Y. It renders through an SVG mask on
+     ::before so the JS sendBtn.textContent queue-label path can never
+     erase it -- same #send button, same events, zero DOM changes. */
+  .composer button::before {
+    display: block;
+    content: ""; width: 24px; height: 28px;
+    background-color: #f7d6dd;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 5L16 12L8 19'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 5L16 12L8 19'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  .composer button:hover:not(:disabled) {
+    filter: drop-shadow(0 0 9px rgba(240, 184, 192, 0.75));
+    transform: translateY(-50%) scale(1.05);
+  }
+  /* P19-T11d: send press -- primary action: the chevron pushes 1px toward
+     the field at 0.95 with a brief inner glow, ~90ms down, ~180ms
+     ease-out release. */
+  .composer button:active:not(:disabled) {
+    transform: translateY(calc(-50% + 1px)) scale(0.95);
+    filter: drop-shadow(0 0 12px rgba(240, 184, 192, 0.7));
+    transition: transform 0.09s ease, filter 0.12s ease;
+  }
+  .composer button:disabled { opacity: 0.45; cursor: default; }
+  /* P18-Fix-01: the composer never locks during a reply. A correction sent
+     mid-reply waits here (one at a time, newest wins) and fires only after
+     the running request reaches a terminal state -- no overlap, no orphan. */
+  .composer-queue { display: none; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px;
+    padding: 8px 14px; border: 1px solid rgba(240, 183, 172, 0.22); border-radius: var(--radius-sm);
+    background: var(--warm-soft); color: var(--ink-soft); font-size: 13px; }
+  .composer-queue.visible { display: flex; }
+  .composer-queue .queue-text { flex: 1; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; color: var(--warm); font-weight: 600; }
+  .composer-queue button { border: 0; background: none; color: var(--ink-soft);
+    cursor: pointer; padding: 2px 6px; border-radius: var(--radius-sm); font-size: 13px; }
+  .composer-queue button:hover { background: rgba(255, 255, 255, 0.08); color: var(--warm); }
+
+  /* ---- shortcuts: four quiet suggestions under the composer, each with its
+     small colored icon (painless repaint: the icon lives in the chip's
+     ::before, the clickable text path is untouched). P20 (round 3): the row
+     is a COMPACT CENTERED CONTENT GROUP — the chips cluster at their own
+     fit-content widths with one modest 8px gap, grouped around the column's
+     center. No equal widths, no stretching to fill the row, no edge
+     anchoring (the P19-T17-E full-width space-between spread read as too
+     loose at the card width). Position comes from exact margins on THIS
+     box, not from flex leftovers: 20px below the composer (T11), 83px of
+     bottom breathing space to the card edge. Composer + shortcuts therefore
+     act as ONE bottom interaction group (P19-T11a slims it in place, lowest
+     point pinned): composer 658->736 (78px tall), 20px gap, shortcuts 756->
+     ~798 (chips ~42px with the T17 font tier), 83px rest -> 880. ---- */
+  .shortcuts {
+    width: auto;
+    margin: 20px 0 83px;
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    gap: 8px;
+  }
+  .chip {
+    /* P19-spacing: content is anchored to the leading edge with 13px
+       horizontal padding -- edge breathing lands ~13px (was loose
+       symmetric centering with ~24-28px on each side), so the icon+label
+       groups read as attached to the pill. P19-T11a: vertical padding
+       slimmed 16 -> 10px. P19-T14-C: the pill's width now comes from its
+       own text + this padding (the old fixed grid columns are gone) --
+       icon, padding, border untouched. P19-T17-E: font steps one tier up
+       (12.5 -> 13.5px); height = 20.25 line + 20 + 2 = ~42.25px, the
+       minimal necessary adaptation. */
+    display: inline-flex; align-items: center; justify-content: flex-start; gap: 8px;
+    white-space: nowrap;
+    border: 1px solid rgba(196, 160, 232, 0.14); color: #bc90a0;
+    background: linear-gradient(135deg, rgba(120, 104, 194, 0.09), rgba(28, 24, 54, 0.30) 45%, rgba(214, 138, 158, 0.09));
+    box-shadow: inset 0 0 0 1px rgba(214, 138, 158, 0.04), inset 0 0 18px rgba(22, 18, 42, 0.31);
+    border-radius: var(--radius-pill); padding: 10px 13px; font: inherit; font-size: 13.5px; line-height: 1.5;
+    cursor: pointer;
+    transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease, transform 0.18s ease-out;
+  }
+  /* P19-F2: chip icons join the same 24-unit mask grid as the transport
+     glyphs -- a 22x22 box, rendered stroke 2.75 (stroke-width 3 scaled
+     24->22), round caps/joins, one controlled family with no emoji/font
+     fallback. Ink heights land 18-19px; the plus's arms are extended to
+     the same band. Icon colors stay exactly as previously assigned. */
+  .chip::before {
+    display: block; content: "";
+    width: 22px; height: 22px;
+    background-color: currentColor;
+  }
+  .chip:nth-of-type(1)::before { color: #d584a9;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.2 L13.9 10.1 L20.8 12 L13.9 13.9 L12 20.8 L10.1 13.9 L3.2 12 L10.1 10.1 Z'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.2 L13.9 10.1 L20.8 12 L13.9 13.9 L12 20.8 L10.1 13.9 L3.2 12 L10.1 10.1 Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  .chip:nth-of-type(2)::before { color: #8a78d5;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11.6 17.2 a3.5 2.9 0 1 0 -7 0 a3.5 2.9 0 1 0 7 0 M11 14.2 L11 3.4 M11 3.4 c4.6 1.4 7 3 7.6 6.2'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11.6 17.2 a3.5 2.9 0 1 0 -7 0 a3.5 2.9 0 1 0 7 0 M11 14.2 L11 3.4 M11 3.4 c4.6 1.4 7 3 7.6 6.2'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  .chip:nth-of-type(3)::before { color: #987dd7;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.4 L12 20.6 M3.4 12 L20.6 12'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.4 L12 20.6 M3.4 12 L20.6 12'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  .chip:nth-of-type(4)::before { color: #ce7eab;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15.21 5.11 A7.6 7.6 0 1 1 8.79 5.11 M17.9 6.4 L15.21 5.11 L13.4 2.7'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15.21 5.11 A7.6 7.6 0 1 1 8.79 5.11 M17.9 6.4 L15.21 5.11 L13.4 2.7'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  .chip:hover { color: #e4c3ce; border-color: rgba(183, 166, 232, 0.4); background: var(--accent-soft); transform: translateY(-1px); }
+  /* P19-T11d: unified press language -- press INSIDE the pill (deeper
+     inset, settles with the row), ~90ms down, ~180ms ease-out release. */
+  .chip:active {
+    transform: translateY(1px) scale(0.95);
+    color: #e4c3ce; border-color: rgba(183, 166, 232, 0.4); background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px rgba(214, 138, 158, 0.08), inset 0 0 22px rgba(22, 18, 42, 0.42);
+    transition: transform 0.09s ease, box-shadow 0.12s ease, color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+  }
+  .footer { display: none; }
+
+  /* ---- thinking: visual de-emphasis (audit Finding A). The state mark is
+     body.is-thinking only; every Default rule above stays pixel-identical
+     without it. Chrome recedes behind the request via opacity only -- no
+     display/visibility/pointer-events change, so the composer stays fully
+     interactive (P18-Fix-01 queueing intact) and :focus-within restores it
+     to near-full the moment the user engages. ---- */
+  body.is-thinking .composer { opacity: 0.55; }
+  body.is-thinking .composer:focus-within { opacity: 0.95; }
+  body.is-thinking .shortcuts { opacity: 0.45; }
+  body.is-thinking .shortcuts:hover { opacity: 0.85; }
+  body.is-thinking .composer-queue { opacity: 0.60; }
+  /* the send glow dims with the state (Default 5px/0.5 untouched); the
+     Default hover glow still answers a direct hover while thinking. */
+  body.is-thinking .composer button { filter: drop-shadow(0 0 3px rgba(240, 184, 192, 0.25)); }
+
+  /* symmetric state motion: opacity-only fades -- no transform, geometry or
+     position changes, so no reflow or layout movement. The body:not(
+     .is-thinking) companion is the one non-prefixed declaration, technically
+     required for the exit fade: when the class is removed the is-thinking
+     transition disappears with it and the composer would otherwise snap back
+     to full brightness. It only declares a transition (no rendered change)
+     and is inert outside the thinking exit. */
+  body.is-thinking .composer, body.is-thinking .shortcuts, body.is-thinking .composer-queue { transition: opacity 0.6s ease; }
+  body:not(.is-thinking) .composer, body:not(.is-thinking) .shortcuts, body:not(.is-thinking) .composer-queue { transition: opacity 0.6s ease; }
+  @media (prefers-reduced-motion: reduce) {
+    body.is-thinking .composer, body.is-thinking .shortcuts, body.is-thinking .composer-queue,
+    body:not(.is-thinking) .composer, body:not(.is-thinking) .shortcuts, body:not(.is-thinking) .composer-queue {
+      transition: none;
+    }
+    /* particle motion is JS-owned: the WAAPI engine reads this same
+       query and composes statically -- no CSS kill list needed. */
+  }
+
+  /* P19-R5: the old 860px "narrow desktop" reflow is DELETED. The two-mode
+     model has no intermediate layout: above 520px the Main Player scales
+     as one unit (stage + transform), below/at 520px it switches directly
+     to the Mini Player. Nothing between may touch shell geometry, composer
+     width, shortcuts, fonts, Welcome / Now Playing positions, padding,
+     gap, flex-wrap or grid columns. */
+
+  /* ---- mini player: one quiet single-line pill (~380-420 x 48-54), the
+     only thing on screen -- no composer, no shortcuts, no chat, no cards.
+     Same material, same ambient light as the full shell. ----
+     P20 C.2 consolidated: this viewport branch is the BROWSER's Mini
+     switch ONLY. The native window owns its form state and tells the page
+     explicitly via data-native-form (see the native blocks below), so every
+     selector here carries :where(html:not(.native-app)) -- a zero-specificity
+     gate that leaves the browser cascade byte-identical while keeping the
+     native shell completely out of viewport-based form switching. */
+  @media (max-width: 520px) {
+    /* P20 C.2 root-cause fix: .stage alone never hid the panel — the
+       #chat-panel section's ID rule at the top of
+       the stylesheet (specificity 100) beat this class rule (10) at every
+       width. Same trap: .banner.visible / .notice.visible (20) beat
+       .banner / .notice (10). The id + the .visible variants regain
+       precedence here; nothing about the Mini design changes. */
+    :where(html:not(.native-app)) .topbar,
+    :where(html:not(.native-app)) .stage,
+    :where(html:not(.native-app)) #chat-panel,
+    :where(html:not(.native-app)) .shortcuts,
+    :where(html:not(.native-app)) .footer,
+    :where(html:not(.native-app)) .banner,
+    :where(html:not(.native-app)) .banner.visible,
+    :where(html:not(.native-app)) .notice,
+    :where(html:not(.native-app)) .notice.visible { display: none; }
+    /* Mini Player: the stage stops being the scaled canvas's footprint and
+       hands the whole viewport to the shell, which stops scaling and stops
+       being the fixed 660x880 canvas. */
+    :where(html:not(.native-app)) .viewport-stage { position: static; width: 100%; height: 100%; aspect-ratio: auto; container-type: normal; }
+    :where(html:not(.native-app)) .shell {
+      position: relative; left: auto; top: auto; margin: 0; transform: none;
+      width: 100%; aspect-ratio: auto; height: 100vh; height: 100dvh;
+      padding: 12px; justify-content: center; border-radius: 0; border: 0;
+      background: none; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+      max-width: none;
+    }
+    :where(html:not(.native-app)) .ambient { opacity: 1; }
+    :where(html:not(.native-app)) .player {
+      width: min(100%, 420px); min-height: 52px; margin: 0 auto;
+      align-items: center; gap: 14px; padding: 8px 10px 8px 18px;
+      background: linear-gradient(150deg, rgba(24, 26, 48, 0.6), rgba(13, 14, 28, 0.78));
+      border: 1px solid var(--line); border-radius: 26px;
+      box-shadow: 0 10px 34px rgba(5, 5, 16, 0.55), 0 0 30px rgba(226, 150, 138, 0.05);
+      backdrop-filter: blur(20px) saturate(150%); -webkit-backdrop-filter: blur(20px) saturate(150%);
+    }
+    :where(html:not(.native-app)) .player-col { gap: 0; }
+    :where(html:not(.native-app)) .preview-now,
+    :where(html:not(.native-app)) .player .note,
+    :where(html:not(.native-app)) .player .idle,
+    :where(html:not(.native-app)) .player .album { display: none; }
+    :where(html:not(.native-app)) .player .now { align-items: center; gap: 8px; }
+    :where(html:not(.native-app)) .player .now .glyph { width: 16px; height: 16px; margin-right: -3px; }
+    :where(html:not(.native-app)) .player .track { font-size: 15px; font-weight: 600; white-space: nowrap; }
+    :where(html:not(.native-app)) .player .artist { font-size: 12px; margin-top: 0; }
+    :where(html:not(.native-app)) .controls { gap: 8px; margin-right: 0; padding-top: 0; }
+    :where(html:not(.native-app)) .controls button { width: 36px; height: 36px; min-width: 36px; min-height: 36px; padding: 4px; }
+    :where(html:not(.native-app)) .controls button::before { font-size: 12px; }
+    /* the Default geometry pins widths/fonts by id -- pin the mini sizes
+       by id too so the media query actually wins */
+    :where(html:not(.native-app)) .controls #prev,
+    :where(html:not(.native-app)) .controls #next { width: 36px; min-width: 36px; }
+    :where(html:not(.native-app)) .controls #play-pause { width: 36px; min-width: 36px; }
+    :where(html:not(.native-app)) #play-pause::before { font-size: 12px; }
+  }
+
+  /* ---- motion honsety: reduce to a static light field, nothing breathes. ---- */
+  @media (prefers-reduced-motion: reduce) {
+    .breathe, .field, .shell::before { animation: none !important; }
+    .view, .composer textarea, .composer button, .chip, .card, .rec-trace, .rec-back,
+    .controls button, .topbar button.quiet, .card .actions button { transition: none !important; }
+    .card.reveal { animation: none !important; opacity: 1; }
+  }
+
+  @keyframes ambient-breathe {
+    0%, 100% { transform: scale(1) translateY(0); opacity: 1; }
+    50% { transform: scale(1.06) translateY(-6px); opacity: 1.15; }
+  }
+  @keyframes shell-breathe {
+    0%, 100% { opacity: 0.88; }
+    50% { opacity: 1; }
+  }
+
+
+
+
+
+  /* ---- thinking motion: the fog only drifts (a few px on a slow
+     52s loop). All particle motion lives in the WAAPI engine at the
+     bottom of this file -- no CSS particle keyframes remain. ---- */
+  @keyframes think-cloud-drift {
+    0%, 100% { transform: translate(0, 0); opacity: 1; }
+    18% { transform: translate(5px, -4px); opacity: 0.96; }
+    41% { transform: translate(-6px, 2px); opacity: 1; }
+    63% { transform: translate(-3px, -5px); opacity: 0.94; }
+    82% { transform: translate(4px, 4px); opacity: 0.98; }
+  }
+  @keyframes card-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ---- Native App Mode (P20 C.1 + C.2 consolidated): the app window IS
+     the card, and the native layer OWNS the form. Only the native shell
+     loads this page with an explicit ?native=1 (never user-agent
+     sniffing), so a browser never sees any of this. The native window
+     controller sets document.documentElement.dataset.nativeForm to the
+     current product form ("main" | "mini"); every native rule is keyed to
+     that attribute -- never to viewport width, never to the browser
+     <=520px breakpoint.
+
+     data-native-form="main": AppKit locks the window to 660:880
+     (contentAspectRatio, clamps 528x704..660x880), so the stage just
+     FILLS the viewport -- 100vw x 100vh, no letterbox math -- and the
+     shell's fixed 660x880 layout box + scale transform keeps the whole
+     canvas proportionally scaled as ONE unit (S = 100cqw / 660) at every
+     window size. The window edge IS the content edge: the card's float
+     shadow, its 1px glass border, its 30px card corner radius and the
+     .shell::after directional edge-reflection ring are all dropped in
+     native Main -- any of them would read as a second frame INSIDE the
+     macOS window's own rounded bounds (P20 round 3; they come back in
+     browsers untouched). The interior fog (.shell::before) stays -- it
+     never touches the edges. The card top stays empty (title starts at
+     Y~8%), so the real system traffic lights float over the card's own
+     dark top-left strip; the native layer puts its drag band in that same
+     empty strip, and no web safe-area padding is needed.
+
+     data-native-form="mini": the same projection as the browser's
+     <=520px Mini, but the window IS the pill (P20 round 4): AppKit
+     fixes the window and pill to one 420x66 border box — no
+     12px halo, no ambient band, no Window→background→player layering.
+     The historical ambient/shell fog remains part of the product material,
+     but every contributing layer is clipped to the same 26px silhouette as
+     the player. The deep native/Web backing remains opaque inside that
+     silhouette, so backdrop-filter never samples the desktop. The pill's
+     border stays inside its box and the
+     macOS window draws the drop shadow, so the pill's own box-shadow is
+     dropped here (it would be clipped at the window edge or read as an
+     outer frame). The native layer hides the traffic lights for this
+     form — no top strip is reserved for them. */
+  /* Main keeps a full-page product underlay for live resize. Mini overrides
+     the page root below: its only opaque material backing belongs to the
+     420x66 rounded shell, never to the rectangular Web viewport. */
+  html.native-app { background: #0b0c1a; }
+  html.native-app[data-native-form="main"] .viewport-stage {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  html.native-app[data-native-form="main"] .shell {
+    left: 0;
+    top: 0;
+    margin: 0;
+    transform-origin: top left;
+    box-shadow: none;
+    border: 0;
+    border-radius: 0;
+  }
+  /* P20 round 5: the directional edge-reflection ring reads as an inner
+     frame against the macOS window edge -- gone in native Main (the
+     window itself supplies the edge). */
+  html.native-app[data-native-form="main"] .shell::after {
+    display: none;
+  }
+  /* P20 round 5: the chips' base look carries an 18px inset dark fog
+     (box-shadow) plus a pink tail in the fill gradient -- at pill scale
+     the fog reads as a dark color block around each icon and the pink
+     stop washes every pill pink, exactly the halo Owner flagged against
+     the reference figure. Native Main keeps the same border, glass
+     material and typography, restrained to ONE hairline inner highlight
+     and a lavender-tinted glass. Browsers keep their original look
+     (the base rule is untouched). */
+  html.native-app[data-native-form="main"] .chip {
+    background: linear-gradient(135deg, rgba(120, 104, 194, 0.08), rgba(28, 24, 54, 0.22) 45%, rgba(120, 104, 194, 0.05));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  }
+  /* ---- native Mini projection (P20 C.2 consolidated, no halo).
+     Same rules as the browser <=520px block, keyed to the explicit native
+     form instead of viewport width. The native layer fixes the WINDOW and
+     pill to the same 420x66 border box (zero margin),
+     so the shell carries NO padding and the pill's min(100%, 420px)
+     resolves to the full shell content width — no breathing-room math, no
+     ambient band. The heavier hook (attribute + class + element/id)
+     re-pins everything the Default geometry pins by id, exactly like the
+     browser block does. ---- */
+  html.native-app[data-native-form="mini"] .topbar,
+  html.native-app[data-native-form="mini"] .stage,
+  html.native-app[data-native-form="mini"] #chat-panel,
+  html.native-app[data-native-form="mini"] .shortcuts,
+  html.native-app[data-native-form="mini"] .footer,
+  html.native-app[data-native-form="mini"] .banner,
+  html.native-app[data-native-form="mini"] .banner.visible,
+  html.native-app[data-native-form="mini"] .notice,
+  html.native-app[data-native-form="mini"] .notice.visible { display: none; }
+  html.native-app[data-native-form="mini"],
+  html.native-app[data-native-form="mini"] body,
+  html.native-app[data-native-form="mini"] .viewport-stage {
+    background: transparent;
+  }
+  html.native-app[data-native-form="mini"] .viewport-stage { position: static; width: 100%; height: 100%; aspect-ratio: auto; container-type: normal; }
+  html.native-app[data-native-form="mini"] .shell {
+    position: relative; left: auto; top: auto; margin: 0; transform: none;
+    width: 100%; aspect-ratio: auto; height: 100vh; height: 100dvh;
+    padding: 0; justify-content: center; border-radius: 26px; border: 0;
+    background: #0b0c1a; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+    max-width: none; overflow: hidden;
+  }
+  /* P20 Mini final-edge contract: keep the original ambient/fog material,
+     but give every material surface the player's exact silhouette. The
+     shell clips its ::before fog; ambient clips its blurred children. The
+     old shell edge-reflection is the only redundant outline and stays off. */
+  html.native-app[data-native-form="mini"] .ambient {
+    display: block; opacity: 1; border-radius: 26px; overflow: hidden;
+  }
+  html.native-app[data-native-form="mini"] .shell::before {
+    display: block; border-radius: inherit;
+  }
+  html.native-app[data-native-form="mini"] .shell::after {
+    display: none;
+  }
+  html.native-app[data-native-form="mini"] .player {
+    width: min(100%, 420px); height: 100%; min-height: 0; margin: 0 auto;
+    align-items: center; gap: 14px; padding: 8px 10px 8px 18px;
+    background: linear-gradient(150deg, rgba(24, 26, 48, 0.6), rgba(13, 14, 28, 0.78));
+    border: 1px solid var(--line); border-radius: 26px;
+    box-shadow: none; /* P20 round 4: the window border IS the pill border;
+                         the macOS window casts its own drop shadow. An
+                         in-page shadow would be clipped at the edge. */
+    backdrop-filter: blur(20px) saturate(150%); -webkit-backdrop-filter: blur(20px) saturate(150%);
+  }
+  html.native-app[data-native-form="mini"] .player-col { gap: 0; }
+  html.native-app[data-native-form="mini"] .preview-now,
+  html.native-app[data-native-form="mini"] .player .note,
+  html.native-app[data-native-form="mini"] .player .idle,
+  html.native-app[data-native-form="mini"] .player .album { display: none; }
+  html.native-app[data-native-form="mini"] .player .now { align-items: center; gap: 8px; }
+  html.native-app[data-native-form="mini"] .player .now .glyph { width: 16px; height: 16px; margin-right: -3px; }
+  html.native-app[data-native-form="mini"] .player .track { font-size: 15px; font-weight: 600; white-space: nowrap; }
+  html.native-app[data-native-form="mini"] .player .artist { font-size: 12px; margin-top: 0; }
+  html.native-app[data-native-form="mini"] .controls { gap: 8px; margin-right: 0; padding-top: 0; }
+  html.native-app[data-native-form="mini"] .controls button { width: 36px; height: 36px; min-width: 36px; min-height: 36px; padding: 4px; }
+  html.native-app[data-native-form="mini"] .controls button::before { font-size: 12px; }
+  html.native-app[data-native-form="mini"] .controls #prev,
+  html.native-app[data-native-form="mini"] .controls #next { width: 36px; min-width: 36px; }
+  html.native-app[data-native-form="mini"] .controls #play-pause { width: 36px; min-width: 36px; }
+  html.native-app[data-native-form="mini"] #play-pause::before { font-size: 12px; }
+  /* P20 C.2: the native window owns every scroll decision — one compact,
+     locked native geometry per form — so the page must never be scrollable
+     behind it. This also kills the scrollbars the previous shrink-the-Main
+     route could surface (the shell's untransformed 660x880 layout box can
+     overflow a narrow window even though its scaled visual fits). Applies
+     to both forms in native mode only; browsers keep their behavior. */
+  html.native-app, html.native-app body { overflow: hidden; }
+</style>
+<script>
+  // Native App Mode is an explicit query flag appended by the app shell,
+  // never user-agent sniffing: without ?native=1 the page behaves exactly
+  // as it always has in a browser.
+  if (new URLSearchParams(location.search).get("native") === "1") {
+    document.documentElement.classList.add("native-app");
+    // AppKit injects the authoritative value at document start. This main
+    // default keeps the first native paint deterministic in standalone
+    // checks or recovery launches where the user script is unavailable;
+    // AppKit still overwrites it on every real form switch.
+    if (!document.documentElement.dataset.nativeForm) {
+      document.documentElement.dataset.nativeForm = "main";
+    }
+  }
+</script>
+</head>
+<body data-play="idle">
+<div class="ambient" aria-hidden="true">
+  <div class="breathe breathe-a"></div>
+  <div class="breathe breathe-b"></div>
+</div>
+<div class="viewport-stage">
+<div class="shell">
+  <header class="topbar">
+    <span class="mode" id="mode-label"></span>
+    <span class="spacer"></span>
+    <button class="quiet" id="quit">退出应用</button>
+  </header>
+  <div class="banner" id="banner"></div>
+  <div class="notice" id="notice"></div>
+
+  <section class="player">
+    <div class="player-col">
+      <div class="preview-now" id="preview-now">
+        <span class="glyph" aria-hidden="true">♪</span>
+        <div class="preview-meta">
+          <div class="kicker" id="preview-kicker"></div>
+          <div class="preview-name" id="preview-name"></div>
+          <div class="preview-sub" id="preview-sub"></div>
+        </div>
+      </div>
+      <div class="idle hidden" id="player-idle">当前没有任何音乐在播放</div>
+      <div class="now hidden" id="player-now">
+        <span class="glyph" aria-hidden="true">♪</span>
+        <div class="now-meta">
+          <div class="track" id="track-name"></div>
+          <div class="artist" id="track-artist"></div>
+          <div class="album" id="track-album"></div>
+        </div>
+      </div>
+      <div class="note" id="player-note"></div>
+    </div>
+    <div class="controls">
+      <button id="prev">上一首</button>
+      <button id="play-pause" class="primary">继续</button>
+      <button id="next">下一首</button>
+    </div>
+  </section>
+
+  <section class="stage" id="chat-panel">
+    <div class="stage-grid">
+      <div class="view" id="view-greet">
+        <div class="hello">晚上好，Ming <span class="spark">✦</span></div>
+        <div class="hello-sub">今天想听什么，或者想让我做什么？</div>
+      </div>
+      <div class="view off" id="view-convo">
+        <!-- P19-T12: the back chevron is owned by the upper navigation
+             layer -- a direct child of the conversation view, right below
+             the player block -- NOT by the recommendation list. All JS
+             stays id-based; P19-T17 re-home: this same ‹ is now the
+             detail face's ONLY way back to the conversation (openDetail /
+             collapseToTrace drive the exact same element), scroll
+             position restored. -->
+        <button class="rec-back off" id="rec-back" type="button" aria-label="返回对话">‹</button>
+        <!-- P19-T16: the archived turn history. Archival happens at the
+             next send, so completed turns stack ABOVE the live pair and
+             the conversation reads in true order. -->
+        <div class="convo-turns" id="convo-turns"></div>
+        <div class="convo-user" id="convo-user"></div>
+        <div class="convo-reply" id="convo-reply"></div>
+        <div id="recs" class="off">
+          <button class="rec-trace off" id="rec-trace" type="button">
+            <span class="glyph" aria-hidden="true">♪</span><span id="rec-trace-text"></span>
+          </button>
+        </div>
+        <!-- P19-T17-A: the standalone recommendation detail face. A trace
+             click (or a fresh batch landing) hands the WHOLE stage device
+             to it -- same window, no third view mode, zero fetch. The
+             conversation history, live pair and every trace stay intact
+             underneath and come back at their exact scroll position. -->
+        <div class="rec-detail off" id="rec-detail">
+          <div class="detail-lead" id="detail-lead"></div>
+          <div class="cards" id="detail-cards"></div>
+        </div>
+      </div>
+      <div class="view off" id="view-thinking">
+        <div class="thinking-request" id="thinking-request"></div>
+        <div class="thinking-field" aria-hidden="true">
+          <div class="field f4"></div>
+          <div class="thinking-particles" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>
+    <div class="messages" id="messages">
+      <div class="msg assistant">你好，我是你的音乐助手。可以直接对我说「推荐几首歌」。你的偏好、推荐和反馈都会保留在本地。</div>
+    </div>
+    <div class="composer-queue" id="queue-chip">
+      <span>已排队：</span><span class="queue-text" id="queue-text"></span><span>（当前回复完成后自动发送）</span>
+      <button id="queue-cancel">取消</button>
+    </div>
+    <div class="composer">
+      <textarea id="input" rows="2" placeholder="想听什么，或者想让我做什么？"></textarea>
+      <button id="send" aria-label="发送">发送</button>
+    </div>
+  </section>
+
+  <nav class="shortcuts">
+    <button class="chip" type="button">推荐音乐</button>
+    <button class="chip" type="button">找类似这首的</button>
+    <button class="chip" type="button">创建歌单</button>
+    <button class="chip" type="button">换个心情</button>
+  </nav>
+  <footer class="footer">数据保存在本机 · 只在本地网络回环内提供服务</footer>
+</div>
+</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const banner = $("banner"), notice = $("notice"), input = $("input"), sendBtn = $("send"),
+      queueChip = $("queue-chip"), queueText = $("queue-text");
+
+let chatBusy = false, commandBusy = false;
+let lastState = { state: null, name: null, artist: null, preview_session: null };
+// P18-S1 display-only hint for the single-preview strip; cleared whenever the
+// runtime's preview_sounding says nothing is in flight. Never a state source.
+let lastPreviewTrack = null;
+
+/* ---- stage presentation state (client-side only, no backend meaning) ----
+   The stage shows either the greeting, the latest exchange, or the thinking
+   field. Recommendations keep their own two faces: the standalone detail
+   view right after a fresh batch lands, folded into a clickable trace the
+   moment the reader returns to the conversation. All transitions are
+   presentation-only; restoring a batch re-renders the cached cards into
+   that batch's exact detail face and never re-runs a recommendation. */
+let lastUserText = null;
+let stageReply = false;
+let batchCache = null;     // {id, run_id, key, cards, label?} of the NEWEST batch remembered this session
+let expandedKey = null;    // batch whose detail face is open in the stage (its item key)
+// P19-T14-D: every batch this page session saw, in first-seen (turn)
+// order. One entry per id (the run id when the server supplies it, the
+// item key otherwise) -- polls re-sight ids but never duplicate them,
+// never reorder them, never re-open them. Page reload clears it
+// (pure session memory, nothing persisted anywhere).
+let batchHistory = [];
+let traceStacksEl = null;  // the created container of OLDER trace lines (no prior turns -> stays null)
+// P19-T9: when the reply produced a structured batch, the rows ARE the
+// result and the stage shows only one verbatim lead sentence under its
+// trace. These hold the reply's raw text (lead source) and the pending
+// detail render (the entry, not the cards).
+let lastReplyText = null;
+let stageProseReply = null; // the stage reply node while it still holds full prose
+let pendingExpandCards = null;
+// P19-T16: the archived turn history. Every send archives the pair the
+// fixed slots still hold (the previous turn) into an ordered block, so
+// nothing is ever destroyed -- user line, AI reply and (via the batch
+// entry's turnSeq) that turn's own trace keep their true order. Pure
+// session-local state: cleared on reload, no storage API, no backend
+// meaning.
+let turnSeq = 0;
+let liveTurnSeq = null;       // seq of the pair currently in the fixed slots
+const turnBlocks = new Map(); // seq -> archived .convo-turn element
+// P19-T17-A: #view-convo scrollTop saved when a detail face opens, so
+// the ‹ return lands on the very line the reader left. Pure view state,
+// cleared with the page.
+let detailReturnScroll = 0;
+
+function bannerOff() { banner.classList.remove("visible"); banner.textContent = ""; }
+function showError(text) { banner.textContent = text; banner.classList.add("visible"); }
+function showNotice(text) {
+  notice.textContent = text; notice.classList.add("visible");
+  setTimeout(() => notice.classList.remove("visible"), 5000);
+}
+
+function post(path, body) {
+  return fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+}
+async function jsonOr(data) {
+  try { return await data.json(); } catch (e) { return { error: { message: "服务响应异常" } }; }
+}
+
+/* ---- player: authoritative readback only, never optimistic ---- */
+function renderPlayer(player) {
+  const idle = $("player-idle"), name = $("track-name"), artist = $("track-artist"),
+        albumEl = $("track-album"), now = $("player-now"),
+        playPause = $("play-pause"), note = $("player-note");
+  const hasTrack = player.state === "playing" || player.state === "paused";
+  name.textContent = hasTrack && player.name ? player.name : "";
+  artist.textContent = hasTrack && player.artist ? player.artist : "";
+  albumEl.textContent = hasTrack && typeof player.album === "string" ? player.album : "";
+  now.classList.toggle("hidden", !hasTrack);
+  idle.classList.toggle("hidden", hasTrack);
+  if (hasTrack) {
+    idle.textContent = "";
+    playPause.textContent = player.state === "playing" ? "暂停" : "继续";
+    playPause.disabled = false;
+  } else {
+    idle.textContent = "当前没有任何音乐在播放";
+    playPause.textContent = "继续"; playPause.disabled = true;
+  }
+  // the ambient light breathes with the interface, never with the beat: the
+  // authoritative state only steps intensity/speed between three levels.
+  document.body.dataset.play = hasTrack ? player.state : "idle";
+  // P18-S2 preview priority: the formal track reads secondary (dimmed) while
+  // a preview holds priority, with the honest interruption note under it.
+  // Facts only -- the runtime alone decides and performs the restore.
+  const formalSuspended = !!player.suspended;
+  now.classList.toggle("suspended", formalSuspended);
+  note.textContent = formalSuspended ? suspensionNote(player.suspended) : "";
+  renderPreviewNow(player);
+}
+
+function renderPreviewNow(player) {
+  const card = $("preview-now"), kicker = $("preview-kicker"),
+        pname = $("preview-name"), sub = $("preview-sub");
+  // P18-S1/S2: runtime authority only. ``preview_sounding`` is the service's
+  // runner truth; the UI never starts its own timer and never resumes --
+  // visibility and wording come exclusively from the polled state.
+  const session = player.preview_session;
+  const sounding = player.preview_sounding === true;
+  if (!session && !sounding) {
+    card.classList.remove("visible", "failed");
+    lastPreviewTrack = null;
+    return;
+  }
+  card.classList.add("visible");
+  card.classList.toggle("failed", session ? session.state === "failed" : false);
+  // the runtime truth replaced the in-flight label -- the button's normal
+  // face comes back immediately, no timer involved
+  clearPending();
+  kicker.textContent = ""; pname.textContent = ""; sub.textContent = "";
+  if (session && session.state === "failed") {
+    kicker.textContent = "试听中断";
+    sub.textContent = session.failure_reason ? "（" + session.failure_reason + "）" : "";
+  } else if (session && session.state === "completed") {
+    kicker.textContent = "连续试听";
+    sub.textContent = "已全部完成";
+  } else if (session && session.state === "cancelled") {
+    kicker.textContent = "试听";
+    sub.textContent = "已停止";
+  } else if (session && typeof session.position === "number" && typeof session.total === "number") {
+    kicker.textContent = "正在试听";
+    pname.textContent = session.current_name || "";
+    sub.textContent = "第 " + session.position + "/共 " + session.total + " 首";
+  } else if (session && session.state === "running") {
+    kicker.textContent = "正在试听";
+    pname.textContent = session.current_name || "";
+  } else {
+    // Single catalog preview: the runtime says a clip is sounding. The name
+    // is the click-time hint from the card that started it -- display-only.
+    kicker.textContent = "试听中 · 30s";
+    pname.textContent = lastPreviewTrack && lastPreviewTrack.name ? lastPreviewTrack.name : "";
+    // the resumed-after truth the runner already registered: the formal
+    // track's name, as an expectation, never as an instruction
+    if (player.suspended && typeof player.suspended.name === "string" && player.suspended.name) {
+      sub.textContent = "试听结束后继续播放 " + player.suspended.name;
+    }
+  }
+}
+
+function suspensionNote(suspended) {
+  // Honest interruption fact from the service's suspension register: the
+  // formal track name + the restore-by-runtime promise. Never a resume instruction.
+  if (!suspended || typeof suspended.name !== "string" || !suspended.name) return "";
+  return "（「" + suspended.name + "」的正式播放已暂停，试听结束后由本地服务自动恢复）";
+}
+
+const PLAYER_POLL_MS = 2000;
+const CONTEXT_IDLE_POLL_MS = 10000;
+const CONTEXT_ACTIVE_POLL_MS = 2000;
+let contextPollTimer = null;
+
+function applyModeLabel(mode) {
+  $("mode-label").textContent = mode === "embed" ? "本地服务" : mode === "attach" ? "已连接运行服务" : "";
+}
+
+function mergeFormalPlayer(player) {
+  if (!player || typeof player !== "object") return;
+  // Fast heartbeat owns only formal-player facts. Preview/session truth stays
+  // whatever the last full /api/state read established; absence here never
+  // means false.
+  for (const key of ["state", "name", "artist", "album"]) {
+    if (Object.prototype.hasOwnProperty.call(player, key)) lastState[key] = player[key];
+  }
+}
+
+function contextNeedsFastPoll(player) {
+  if (!player) return false;
+  const session = player.preview_session;
+  return player.preview_sounding === true || !!player.suspended ||
+    !!(session && session.state === "running");
+}
+
+function contextPollTargetMs(player) {
+  return contextNeedsFastPoll(player) ? CONTEXT_ACTIVE_POLL_MS : CONTEXT_IDLE_POLL_MS;
+}
+
+function nextContextPollDelay(startedAt) {
+  const elapsed = performance.now() - startedAt;
+  return Math.max(0, contextPollTargetMs(lastState) - elapsed);
+}
+
+async function pollPlayerState() {
+  try {
+    const data = await jsonOr(await fetch("/api/player-state"));
+    if (data.error) { return; }
+    mergeFormalPlayer(data.player);
+    applyModeLabel(data.mode);
+    renderPlayer(lastState);
+    if (lastState.state === "playing") clearPending();
+  } catch (e) { /* transient; next heartbeat retries */ }
+}
+
+async function pollState() {
+  try {
+    const data = await jsonOr(await fetch("/api/state"));
+    if (data.error) { return; }
+    lastState = data.player || lastState;
+    applyModeLabel(data.mode);
+    renderPlayer(lastState);
+    // authoritative truth: a formal "playing" confirms the play request --
+    // the button's in-flight label clears here, never on a client timer
+    if (lastState.state === "playing") clearPending();
+  } catch (e) { /* transient; next context poll retries */ }
+}
+
+function scheduleContextPoll(delay = contextPollTargetMs(lastState)) {
+  if (contextPollTimer !== null) clearTimeout(contextPollTimer);
+  contextPollTimer = setTimeout(async () => {
+    contextPollTimer = null;
+    const startedAt = performance.now();
+    await pollState();
+    scheduleContextPoll(nextContextPollDelay(startedAt));
+  }, Math.max(0, delay));
+}
+
+async function refreshFullState() {
+  if (contextPollTimer !== null) {
+    clearTimeout(contextPollTimer);
+    contextPollTimer = null;
+  }
+  const startedAt = performance.now();
+  await pollState();
+  scheduleContextPoll(nextContextPollDelay(startedAt));
+}
+
+/* ---- cards ---- */
+
+/* ---- recommendation presentation: two faces of the SAME cached batch.
+     Expanded = compact rows right under the reply; trace = one quiet line
+     that restores the expanded face from cache. The batch data is whatever
+     /api/cards last returned -- never re-generated, never re-fetched.
+     P19-T9: the rows ARE the primary result when they exist -- every row is
+     title + artist + route-aware actions, no cover slot, no artwork.
+     P19-T14-B: identity travels as the recommendation RUN id (server-side),
+     with the item-key join as an id-only fallback -- two runs whose items
+     project to the same key are still two DIFFERENT batches, and batch
+     freshness (expand vs. keep-face) is decided by run id, never by
+     key equality. ---- */
+function batchKey(cards) {
+  return cards.map((card) => card.canonical_id).join("|");
+}
+
+/* P19-T9: above the rows sits at most ONE short lead sentence. It is a
+   literal prefix of the AI's own reply (first line, earliest sentence
+   ender, hard character cap with an ellipsis) -- a presentation choice,
+   never a rewrite, so no fact is invented and the raw path is untouched
+   for normal chat. */
+function chatLead(replyText) {
+  if (!replyText) return "";
+  const line = replyText.trim().split(/\r?\n/, 1)[0].trim();
+  if (!line) return "";
+  // presentation cleanup only: drop the inline markdown markers the
+  // rendered channel would have styled anyway; the words stay verbatim
+  let lead = line.replace(/[#*_`]/g, "");
+  const end = lead.search(/[。！？!?]/);
+  if (end >= 0) lead = lead.slice(0, end + 1);
+  const MAX = 72;
+  if (lead.length > MAX) {
+    lead = lead.slice(0, MAX).replace(/[，、：:;\s]+[^，、：:;]*$/, "") + "…";
+  }
+  return lead;
+}
+
+/* P19-T14-B-R4 ownership gate, presentation-only: the same numbered-list
+   shape the server door uses, mirrored here so a NO-batch response that
+   would dethrone an expanded batch is recognized without parsing songs,
+   building cards, or touching generation. Ordinary prose never matches. */
+function looksLikeNumberedSongList(text) {
+  if (!text) return false;
+  const lines = text.split(/\r?\n/);
+  let numbered = 0;
+  let dashed = 0;
+  for (const line of lines) {
+    if (/^\s*\d{1,3}\s*[.、)）]\s*/.test(line)) numbered++;
+    if (line.indexOf("—") >= 0) dashed++;
+  }
+  return numbered >= 2 && dashed >= 1;
+}
+
+/* P19-T9 invariant: expanded rows are never shown under a long prose
+   paragraph. When a batch arrives after a full-prose reply (a late poll
+   or heartbeat), the stage reply collapses into the lead form too. */
+function convertStageReplyToLead() {
+  if (!stageReply || !stageProseReply) return;
+  const node = stageProseReply;
+  stageProseReply = null;
+  if (!node.isConnected || node.classList.contains("lead")) return;
+  const lead = chatLead(lastReplyText || "");
+  if (!lead) return; // nothing to lift: keep the reply intact
+  node.classList.remove("rendered");
+  node.textContent = lead;
+  node.classList.add("lead");
+}
+
+/* P19-T14-D session trace memory: every turn's batch keeps its own trace
+   line. The static #rec-trace button is the NEWEST line (frozen count
+   sentence, click contract unchanged); older batches are created buttons
+   stacked just above it in generation order, each restoring that exact
+   cached batch -- zero fetch, zero regeneration, one batch expanded. */
+function rememberBatch(cardData) {
+  for (const entry of batchHistory) {
+    if (entry.id === cardData.id) { entry.cards = cardData.cards; return entry; }
+  }
+  const entry = { id: cardData.id, key: cardData.key, cards: cardData.cards };
+  batchHistory.push(entry);
+  /* P19-T14-B: the refresh path above changes no surface (its caller
+     already marks); only a push extends the trace memory. */
+  return entry;
+}
+/* P19-T17-D: a trace names ITS batch from that turn's own request text
+   (frozen on the entry at send time) -- a short deterministic keyword
+   label, no model calls, no network, never the whole request pasted in.
+   The 类似 target is the player snapshot name taken at ask time, so the
+   label stays true even after the user plays something else later. */
+function requestLabel(userText, refName) {
+  if (!userText) return "";
+  if (/类似|相似/.test(userText)) return refName ? "类似 " + refName : "类似这首";
+  if (/晚上|夜晚|夜宵|睡前|睡眠|入眠/.test(userText)) return "今晚推荐";
+  if (/推荐|歌曲|歌|音乐|播放/.test(userText)) return "新推荐";
+  return "";
+}
+/* the one-line face text: fallback stays the generic 推荐 · N 首 */
+function traceText(label, count) {
+  return (label || "推荐") + " · " + count + " 首 ›";
+}
+function traceButtonFor(entry, line) {
+  const glyph = document.createElement("span");
+  glyph.className = "glyph";
+  glyph.setAttribute("aria-hidden", "true");
+  glyph.textContent = "♪";
+  const text = document.createElement("span");
+  text.textContent = traceText(entry.label, entry.cards.length);
+  line.append(glyph, text);
+  /* P19-T17-A: the click no longer expands rows under the conversation --
+     it hands the whole stage to that batch's standalone detail face (the
+     cached cards re-render, the exact batch binding never moves, zero
+     /api/chat, zero regeneration). */
+  line.onclick = () => {
+    if (!entry.cards.length) return;
+    convertStageReplyToLead();
+    openDetail(entry);
+  };
+  return line;
+}
+
+function renderTrace() {
+  const recs = $("recs");
+  // P19-T11c: the back chevron belongs to the EXPANDED face only -- every
+  // folded branch (including the empty early return) hides it.
+  $("rec-back").classList.add("off");
+  // The live recommendation affordance belongs to the live chat turn, not
+  // to the newest durable run. Archived recommendation turns keep their
+  // own trace buttons through syncTurnTraces(), but a search/playback/
+  // library reply must never inherit an older batchCache face.
+  const currentTurnOwnsBatch = !!(
+    batchCache && liveTurnSeq !== null && batchCache.turnSeq === liveTurnSeq
+  );
+  if (!batchHistory.length || !stageReply || !currentTurnOwnsBatch) {
+    recs.classList.add("off");
+    syncTurnTraces();
+    return;
+  }
+  recs.classList.remove("off");
+  // P19-T14-D: the whole trace list rebuilds each time the face folds --
+  // every turn keeps its own line in first-seen order; the newest one is
+  // the static #rec-trace button (its #rec-trace-text path and the frozen
+  // count sentence stay untouched), older lines re-render above it.
+  let older = traceStacksEl;
+  if (older) older.replaceChildren();
+  // P19-T17-R2-A: one visible trace per batch, by identity/ownership only
+  // (labels are never compared). A turn-owned batch already keeps its line
+  // inside its turn block; once ANY batch in this session is turn-owned,
+  // the legacy detached stack must not project a second line for
+  // session-initial / out-of-band entries. An out-of-band batch with no
+  // owning turn still gets its single static #rec-trace line via
+  // batchCache -- exactly one trace, never two.
+  const hasTurnOwned = batchHistory.some((entry) => entry.turnSeq !== undefined);
+  batchHistory.forEach((entry) => {
+    if (entry.id === batchCache.id) return;
+    // P19-T16: a batch born of a chat turn keeps its trace INSIDE that
+    // turn's archived block -- the detached stack here stays for batches
+    // without a turn (session-initial / out-of-band polls) only.
+    if (entry.turnSeq !== undefined) return;
+    // P19-T17-R2-A: the user action behind every turn-owned batch owns the
+    // turn trace; session-initial / out-of-band entries yield to it once a
+    // turn-owned batch exists (they already showed their one line earlier).
+    if (hasTurnOwned) return;
+    if (!older) {
+      older = traceStacksEl = document.createElement("div");
+      older.className = "rec-trace-old";
+      $("recs").insertBefore(older, $("rec-trace"));
+    }
+    const line = document.createElement("button");
+    line.type = "button";
+    line.className = "rec-trace";
+    traceButtonFor(entry, line);
+    older.append(line);
+  });
+  $("rec-trace-text").textContent = traceText(batchCache.label, batchCache.cards.length);
+  // P19-T16: the static line is the LIVE pair's newest-batch line only.
+  // Once that turn is archived its trace lives inside its own block, so
+  // the static line must not duplicate it (an unbound batch -- initial
+  // or out-of-band -- always keeps the static line, turn or no turn).
+  $("rec-trace").classList.toggle(
+    "off",
+    !!(batchCache && batchCache.turnSeq !== undefined && turnBlocks.has(batchCache.turnSeq)),
+  );
+  // P19-T16: while the face is folded every ARCHIVED turn shows its trace
+  // (the newest batch's line stays the static #rec-trace above); a fold
+  // may have just changed which batch is open, so re-sync the per-block
+  // lines.
+  syncTurnTraces();
+}
+
+/* P19-T17-A: openDetail hands the whole stage device to one batch's
+   standalone detail face (inside #view-convo -- never a third window).
+   The conversation stays untouched underneath the .detail-open gate;
+   the exact scrollTop is saved here and restored by the ‹ return. */
+function openDetail(entry) {
+  if (!entry || !entry.cards.length) return;
+  // While a detail face is already open, a newer batch takes its place
+  // WITHOUT re-capturing the scroller -- the saved value must stay the
+  // ORIGINAL conversation position, so the return always lands there.
+  const switching = $("view-convo").classList.contains("detail-open");
+  expandedKey = entry.key;
+  if (!switching) detailReturnScroll = $("view-convo").scrollTop;
+  renderExpanded(entry);
+}
+function renderExpanded(entry) {
+  const container = $("detail-cards");
+  // P19-T14-D: exactly one batch open -- the older detached trace lines
+  // fold away with the newest (empty stack renders nothing; renderTrace
+  // rebuilds them when the conversation face returns)
+  if (traceStacksEl) traceStacksEl.replaceChildren();
+  $("view-convo").classList.add("detail-open");
+  $("rec-detail").classList.remove("off");
+  $("rec-back").classList.remove("off");
+  $("detail-lead").textContent = traceText(entry.label, entry.cards.length);
+  // P19-T16: the open batch is the only face -- its archived block hides
+  // its own trace (the detail rows ARE its face) while every other turn's
+  // trace stays ready for the return path; one batch open at a time.
+  syncTurnTraces();
+  container.replaceChildren();
+  entry.cards.forEach((card, i) => {
+    const row = cardButtonCard(card);
+    row.classList.add("reveal");
+    row.style.animationDelay = Math.min(i * 70, 420) + "ms";
+    container.append(row);
+  });
+}
+
+function collapseToTrace() {
+  if (!expandedKey) return;
+  // P19-T17-A: closing the detail face puts the conversation and the
+  // scroller back exactly where the reader left them. The restore runs in
+  // the same task as the class flip -- layout happens after, so the saved
+  // scrollTop sticks instead of clamping.
+  expandedKey = null;
+  $("view-convo").classList.remove("detail-open");
+  $("rec-detail").classList.add("off");
+  renderTrace();
+  $("view-convo").scrollTop = detailReturnScroll;
+}
+
+function cardButtonCard(card) {
+  const slot = document.createElement("div");
+  slot.className = "card";
+  const meta = document.createElement("div"); meta.className = "meta";
+  const name = document.createElement("div"); name.className = "name"; name.textContent = card.name || "未命名曲目";
+  const artist = document.createElement("div"); artist.className = "artist"; artist.textContent = card.artist || "";
+  meta.append(name, artist);
+  const actions = document.createElement("div"); actions.className = "actions";
+  if (card.route === "library") {
+    const play = document.createElement("button"); play.className = "primary"; play.textContent = "播放";
+    play.onclick = () => {
+      markPending(play, "正在播放…", "play_track");
+      runCommand("play_track", card.canonical_id, null);
+    };
+    actions.append(play);
+    // P18-S2: the Apple Music button only when the backend says the track's
+    // itunes binding makes the open genuinely possible (projected fact, the
+    // UI decides nothing).
+    if (card.apple_music_openable) {
+      const open = document.createElement("button"); open.classList.add("open-am"); open.textContent = "在 Apple Music 打开";
+      open.onclick = () => {
+        markPending(open, "正在打开…", "open_in_apple_music");
+        runCommand("open_in_apple_music", card.canonical_id, "已交给 Apple Music 打开");
+      };
+      actions.append(open);
+    }
+  } else if (card.route === "preview_only") {
+    const preview = document.createElement("button"); preview.className = "primary"; preview.textContent = "试听 30 秒";
+    preview.onclick = () => {
+      lastPreviewTrack = { canonical_id: card.canonical_id, name: card.name || "" };
+      markPending(preview, "正在开始试听…", "preview_catalog_track");
+      runCommand("preview_catalog_track", card.canonical_id, null);
+    };
+    actions.append(preview);
+    if (card.apple_music_openable) {
+      const open = document.createElement("button"); open.classList.add("open-am"); open.textContent = "在 Apple Music 打开";
+      open.onclick = () => {
+        markPending(open, "正在打开…", "open_in_apple_music");
+        runCommand("open_in_apple_music", card.canonical_id, "已交给 Apple Music 打开");
+      };
+      actions.append(open);
+    }
+  } else {
+    const label = document.createElement("span"); label.className = "unavailable"; label.textContent = "暂不可播放";
+    actions.append(label);
+  }
+  meta.append(actions);
+  slot.append(meta);
+  return slot;
+}
+
+async function fetchCardData() {
+  try {
+    const data = await jsonOr(await fetch("/api/cards"));
+    if (data.error) { return null; }
+    const cards = data.cards || [];
+    if (!cards.length) { return null; }
+    const key = batchKey(cards);
+    // P19-T14-B: the server's run id is the batch identity; the item-key
+    // join is only the fallback id for a cards payload without one.
+    return { id: data.run_id || key, run_id: data.run_id || null, key: key, cards: cards };
+  } catch (e) { return null; /* transient */ }
+}
+
+async function pollCards() {
+  const cardData = await fetchCardData();
+  if (!cardData) { return; }
+  const known = batchHistory.some((entry) => entry.id === cardData.id);
+  // /api/cards is a durable latest-run read, not a turn result channel.
+  // It may refresh a batch already attached by this page's /api/chat
+  // response, but it never creates UI ownership for an unknown historic or
+  // out-of-band run. This also keeps reload quiet when the database's latest
+  // record belongs to an earlier session.
+  if (!known) { return; }
+  rememberBatch(cardData);
+}
+
+/* P18-S3: one in-flight action button may show an honest "request sent"
+   label. It is cleared by the authoritative polled truth (preview_sounding /
+   formal playing state), by the command's own completion (open), or by an
+   error -- never by a client timer, and no progress amount is invented. */
+let pendingBtn = null;
+function markPending(btn, label, forTool) {
+  clearPending();
+  btn.dataset.orig = btn.textContent;
+  btn.dataset.forTool = forTool;
+  btn.textContent = label;
+  btn.disabled = true;
+  pendingBtn = btn;
+}
+function clearPending() {
+  if (!pendingBtn) return;
+  pendingBtn.textContent = pendingBtn.dataset.orig || pendingBtn.textContent;
+  pendingBtn.disabled = false;
+  pendingBtn = null;
+}
+
+/* P21 native Apple Music handoff: backend identity resolution stays authoritative;
+   native mode waits for the foreground AppKit bridge before reporting UI success. */
+const nativeAppleMusicRequests = new Map();
+function nativeAppMode() {
+  return document.documentElement.classList.contains("native-app");
+}
+window.__musicAgentNativeAppleMusicResult = function(payload) {
+  if (!payload || typeof payload.request_id !== "string") return;
+  const pending = nativeAppleMusicRequests.get(payload.request_id);
+  if (!pending) return;
+  nativeAppleMusicRequests.delete(payload.request_id);
+  if (payload.ok === true) pending.resolve();
+  else pending.reject(new Error(payload.message || "无法交给 Apple Music 打开。"));
+};
+function nativeAppleMusicOpen(clientUrl) {
+  return new Promise((resolve, reject) => {
+    const handler = window.webkit && window.webkit.messageHandlers
+      ? window.webkit.messageHandlers.appleMusicOpen : null;
+    if (!nativeAppMode() || !handler || typeof handler.postMessage !== "function") {
+      reject(new Error("原生 Apple Music 打开通道不可用。"));
+      return;
+    }
+    if (typeof clientUrl !== "string" || !clientUrl) {
+      reject(new Error("没有可用的 Apple Music 曲目地址。"));
+      return;
+    }
+    if (!window.crypto || typeof window.crypto.randomUUID !== "function") {
+      reject(new Error("原生 Apple Music 打开通道无法生成请求标识。"));
+      return;
+    }
+    const requestId = window.crypto.randomUUID();
+    nativeAppleMusicRequests.set(requestId, { resolve: resolve, reject: reject });
+    try {
+      handler.postMessage({ request_id: requestId, client_url: clientUrl });
+    } catch (error) {
+      nativeAppleMusicRequests.delete(requestId);
+      reject(error instanceof Error ? error : new Error("原生 Apple Music 打开失败。"));
+    }
+  });
+}
+
+/* ---- commands: one backend tool per action, no frontend logic ---- */
+async function runCommand(tool, canonicalId, successNotice) {
+  if (commandBusy) return;
+  commandBusy = true; bannerOff();
+  const nativeAppleMusic = tool === "open_in_apple_music" && nativeAppMode();
+  const body = nativeAppleMusic
+    ? { canonical_id: canonicalId }
+    : { tool: tool };
+  if (!nativeAppleMusic && canonicalId) body.canonical_id = canonicalId;
+  try {
+    const endpoint = nativeAppleMusic ? "/api/apple-music-target" : "/api/command";
+    const data = await jsonOr(await post(endpoint, body));
+    if (data.ok) {
+      if (nativeAppleMusic) {
+        const result = data.result || {};
+        await nativeAppleMusicOpen(result.client_url);
+        showNotice("已交给 Apple Music 打开");
+      } else {
+        if (data.message) showNotice(data.message);
+        else if (successNotice) showNotice(successNotice);
+      }
+      if (tool === "preview_catalog_track") refreshFullState();
+      else pollPlayerState();
+      pollCards();
+    } else if (data.error) {
+      clearPending();
+      showError(data.error.message || "操作失败，请重试。");
+      if (tool === "preview_catalog_track") refreshFullState();
+      else pollPlayerState();
+    }
+  } catch (e) {
+    clearPending();
+    if (tool === "open_in_apple_music" && nativeAppMode()) {
+      showError(e && e.message ? e.message : "无法交给 Apple Music 打开。");
+    } else {
+      showError("无法连接本地服务。");
+    }
+  } finally {
+    commandBusy = false;
+    // the open completes with the command itself; play/preview stay pending
+    // until the polled truth confirms the outcome
+    if (pendingBtn && pendingBtn.dataset.forTool === "open_in_apple_music") {
+      clearPending();
+    }
+  }
+}
+$("play-pause").onclick = () =>
+  runCommand(lastState.state === "playing" ? "pause" : "play", null, null);
+$("prev").onclick = () => runCommand("previous_track", null, null);
+$("next").onclick = () => runCommand("next_track", null, null);
+
+/* ---- chat through the existing agent backend only ---- */
+// P18-S3: auto-scroll keeps the newest message visible but never yanks the
+// reader mid-history -- it only follows when the view is already at the
+// bottom, or when the message is the reader's own (the composer is always
+// anchored together with a just-sent message).
+function scrollToLatest() {
+  $("messages").scrollTop = $("messages").scrollHeight;
+}
+function nearBottom() {
+  const box = $("messages");
+  return box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+}
+function appendMessage(role, text, renderedHtml) {
+  const msg = document.createElement("div");
+  msg.className = "msg " + role;
+  if (role === "assistant" && typeof renderedHtml === "string") {
+    // P18-S1: the ONLY innerHTML channel in this UI. The content is the
+    // server's markdown_presentation output -- escape-first, whitelisted
+    // tags, http(s)-only links. User messages and every other channel
+    // stay textContent.
+    msg.classList.add("rendered");
+    msg.innerHTML = renderedHtml;
+  } else {
+    msg.textContent = text;
+  }
+  $("messages").append(msg);
+  const shouldStick = role === "user" || nearBottom();
+  if (shouldStick) scrollToLatest();
+}
+let thinkingNode = null;
+function setThinking(on) {
+  document.body.classList.toggle("is-thinking", on);
+  try { on ? tpEnter() : tpExit(); }
+  catch (e) { console.error("[tp] engine failed:", e); }
+  $("view-thinking").classList.toggle("off", !on);
+  if (on) {
+    // Thinking is an overlay of the conversation: the stages underneath are
+    // hidden while the field runs. Leaving thinking never decides the next
+    // stage -- renderConversation owns that (greet = initial idle only,
+    // convo = the only target once a message exists, never the reverse).
+    $("view-greet").classList.add("off");
+    $("view-convo").classList.add("off");
+  }
+  if (on && !thinkingNode) {
+    thinkingNode = document.createElement("div");
+    thinkingNode.className = "msg thinking";
+    thinkingNode.textContent = "思考中…";
+    $("messages").append(thinkingNode);
+    scrollToLatest();
+  } else if (!on && thinkingNode) {
+    thinkingNode.remove(); thinkingNode = null;
+  }
+}
+/* ---- P19-T16 session turn archive ----
+   Every reply renders its turn's pair into the two fixed slots; the next
+   send archives that pair into an ordered .convo-turn block so nothing is
+   ever destroyed. The block's trace line appears when its batch is bound
+   (entry.turnSeq) and hides only while that exact batch is expanded. */
+function syncTurnTraces() {
+  for (const entry of batchHistory) {
+    if (entry.turnSeq === undefined) continue;
+    if (!entry.cards.length) continue;
+    const block = turnBlocks.get(entry.turnSeq);
+    if (!block) continue; // the live pair still owns it: the static line covers it
+    let line = block.querySelector(".turn-trace");
+    if (!line) {
+      line = document.createElement("button");
+      line.type = "button";
+      line.className = "rec-trace turn-trace";
+      traceButtonFor(entry, line);
+      block.append(line);
+    }
+    if (expandedKey === entry.key) line.classList.add("off");
+    else line.classList.remove("off");
+  }
+}
+function archiveLivePair() {
+  const userNode = $("convo-user").firstElementChild;
+  const replyNode = $("convo-reply").firstElementChild;
+  if (!userNode && !replyNode) return;
+  const block = document.createElement("div");
+  block.className = "convo-turn";
+  if (userNode) {
+    const userLine = document.createElement("div");
+    userLine.className = "convo-user";
+    userLine.append(userNode);
+    block.append(userLine);
+  }
+  if (replyNode) {
+    const replyLine = document.createElement("div");
+    replyLine.className = "convo-reply";
+    replyLine.append(replyNode);
+    block.append(replyLine);
+  }
+  if (liveTurnSeq !== null) {
+    block.dataset.turnSeq = liveTurnSeq;
+    turnBlocks.set(liveTurnSeq, block);
+    liveTurnSeq = null;
+  }
+  $("convo-turns").append(block);
+  syncTurnTraces();
+}
+/* the stage's two conversation lines mirror the newest nodes from the
+   hidden history buffer -- the nodes move (one innerHTML write total),
+   nothing is re-rendered or duplicated. */
+function renderConversation() {
+  const has = lastUserText !== null || stageReply;
+  $("view-greet").classList.toggle("off", has);
+  $("view-convo").classList.toggle("off", !has);
+  if (has) {
+    $("convo-user").replaceChildren();
+    $("convo-reply").replaceChildren();
+    // P19-T16: pick the NEWEST nodes by array order, not by element type.
+    // The old :last-of-type match could never hit -- every .msg node is a
+    // div and the user line is always followed by replies -- so no user
+    // text ever reached the stage. The greeting is the buffer's first
+    // child and must never move into the stage: an errored turn has no
+    // reply of its own, so that guard leaves the reply slot empty (the
+    // next send archives the turn as a user-only block).
+    const bufferUsers = document.querySelectorAll("#messages .msg.user");
+    const userNode = bufferUsers.length ? bufferUsers[bufferUsers.length - 1] : null;
+    if (userNode) $("convo-user").append(userNode);
+    const bufferReplies = document.querySelectorAll("#messages .msg.assistant");
+    const replyNode = bufferReplies.length > 1 ? bufferReplies[bufferReplies.length - 1] : null;
+    if (replyNode) $("convo-reply").append(replyNode);
+    if (stageReply) {
+      // P19-T14-B-R4: an open batch detail is the face this session owns.
+      // A reply completion never closes it -- collapseToTrace stays the
+      // return path for the legitimate escapes only (turn start, explicit
+      // back, the empty trace), never for a completion that just answered
+      // the turn.
+      if (!expandedKey) renderTrace();
+    }
+    else { $("recs").classList.add("off"); }
+  }
+}
+/* P20 conversation-scroll repair: #messages is only the hidden node buffer;
+   #view-convo is the product's real scrollport. WebKit may clamp that
+   scrollTop to zero while Thinking hides the view and renderConversation
+   moves the live pair back into its fixed slots. Once the completed turn is
+   visible, anchor its user line inside the existing history. This is a
+   completion-only handoff, not an every-render scroll-to-bottom policy, so
+   detail return and deliberate history reading keep their own contracts. */
+function revealCompletedTurn() {
+  const box = $("view-convo");
+  const currentTurn = $("convo-user");
+  if (!currentTurn.firstElementChild) return;
+  const boxRect = box.getBoundingClientRect();
+  const turnRect = currentTurn.getBoundingClientRect();
+  const maxScroll = Math.max(0, box.scrollHeight - box.clientHeight);
+  const anchoredTop = box.scrollTop + turnRect.top - boxRect.top - 8;
+  box.scrollTop = Math.min(maxScroll, Math.max(0, anchoredTop));
+}
+/* ---- chat: correction-while-running (P18 Fix 01) ----
+   The composer never locks during a reply. While a request is in flight the
+   user can keep typing, and sending stores the text as a QUEUED correction --
+   one at a time, the newest always replacing the previous (latest intent
+   wins). The queue fires only after the running request reaches a terminal
+   state and its reply is rendered, so two requests never overlap and a stale
+   reply can never appear as the answer to a newer correction. True backend
+   cancellation does not exist (the provider loop runs to completion on its
+   serial worker), so there is deliberately no fake "stop" action here. */
+let queuedDraft = null;
+
+function renderQueue() {
+  queueChip.classList.toggle("visible", queuedDraft !== null);
+  queueText.textContent = queuedDraft || "";
+}
+function queueCorrection(text) {
+  input.value = "";
+  queuedDraft = text; // replace: the newest correction wins
+  renderQueue();
+}
+async function deliverChat(text) {
+  try {
+    chatBusy = true; bannerOff();
+    // P19-T16: archive the pair the fixed slots still hold (the previous
+    // turn) BEFORE this turn folds its batch -- its trace attaches to its
+    // own block, so the true order (user / reply / trace per turn) is
+    // never flattened into one detached stack.
+    archiveLivePair();
+    const seq = ++turnSeq;
+    liveTurnSeq = seq;
+    input.value = "";
+    appendMessage("user", text);
+    lastUserText = text;
+    // moving on from a shown batch closes its detail face and puts the NEW
+    // turn in view: the same cached result stays one click away, nothing
+    // is recomputed
+    const hadOpenBatch = !!expandedKey;
+    collapseToTrace();
+    if (hadOpenBatch) $("view-convo").scrollTop = $("view-convo").scrollHeight;
+    // thinking presentation: only the current request + the light field
+    $("thinking-request").textContent = text;
+    setThinking(true);
+
+    const data = await jsonOr(await post("/api/chat", { text: text }));
+    if (data.error) showError(data.error.message || "回复生成失败。");
+    else {
+      stageReply = true;
+      lastReplyText = data.reply || "";
+      stageProseReply = null;
+      // P19-T9 + P19-T14-B: a batch whose run arrived attached to THIS
+      // reply belongs to THIS reply -- the structured rows are its result,
+      // so the full raw prose never becomes the main middle content. The
+      // reply renders as one short verbatim lead sentence above the rows;
+      // the expanded face is revealed right after the stage turns visible
+      // (finally, below). Every other reply keeps the raw rendered path
+      // unchanged.
+      // P19-T14-B: the batch travels WITH this reply (same fetch, same
+      // run) as the run the chat just generated -- no separate /api/cards
+      // read, no cross-fetch race -- and freshness is the run IDENTITY,
+      // so a run whose items re-project to an old key still takes over.
+      const batch = data.batch && data.batch.run_id
+        ? { id: data.batch.run_id, run_id: data.batch.run_id,
+            key: batchKey(data.batch.cards || []), cards: data.batch.cards || [],
+            label: data.batch.label || "" }
+        : null;
+      // The endpoint owns this attachment. A successful replay of the same
+      // run must also open its cards for this turn; history identity only
+      // deduplicates the archive, never vetoes delivery.
+      if (batch && batch.cards.length) {
+        const turnEntry = rememberBatch(batch);
+        turnEntry.turnSeq = seq; // P19-T16: this turn's trace lives inside this turn's block
+        // The server-resolved explicit seed owns the label when present; the
+        // legacy request/current-player derivation remains only for generic
+        // and "类似这首" forms. Either value is frozen on this turn.
+        turnEntry.userText = text;
+        turnEntry.label = batch.label || requestLabel(
+          text, lastState && lastState.name ? lastState.name : ""
+        );
+        batchCache = batch;
+        batchCache.turnSeq = seq; // (T16 runtime gap) the static newest line's archive-dedup reads the turn identity from batchCache itself
+        batchCache.label = turnEntry.label; // P19-T17-D: the static newest line speaks this turn's own label, never the generic fallback
+        expandedKey = batch.key;
+        pendingExpandCards = turnEntry;
+        const lead = chatLead(lastReplyText);
+        if (lead) {
+          appendMessage("assistant", lead);
+          const node = document.querySelector("#messages .msg.assistant:last-of-type");
+          if (node) node.classList.add("lead");
+        }
+      } else {
+        // P19-T14-B-R4 ownership guard: a turn's raw recommendation prose
+        // must never dethrone the successful structured batch this session
+        // already owns -- neither the batch this very reply re-delivers
+        // (re-sent run id), nor the expanded face currently on screen.
+        // The reply folds to its one-line T9 lead and the rows stay, so
+        // the final state is ALWAYS: short lead + structured rows, never:
+        // long numbered prose + hidden rows. Presentational only: nothing
+        // is parsed into cards, and ordinary prose (no list shape) keeps
+        // the raw rendered path untouched.
+        if ((expandedKey !== null || batch) && looksLikeNumberedSongList(data.reply || "")) {
+          const lead = chatLead(data.reply || "");
+          if (lead) {
+            appendMessage("assistant", lead);
+            const node = document.querySelector("#messages .msg.assistant:last-of-type");
+            if (node) node.classList.add("lead");
+          }
+          stageProseReply = null;
+        } else {
+          appendMessage("assistant", data.reply || "", data.reply_html);
+          stageProseReply = document.querySelector("#messages .msg.assistant:last-of-type");
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[chat] deliver failed:", e);
+    showError("无法连接本地服务。");
+  } finally {
+    chatBusy = false;
+    // P19-T10 handoff: the target conversation stage activates FIRST and
+    // the thinking field recedes in the very same task -- one atomic frame,
+    // so no idle/greeting state can appear in between. setThinking(false)
+    // deliberately stops managing greet/convo on exit; renderConversation
+    // is their single owner.
+    renderConversation();
+    setThinking(false);
+    revealCompletedTurn();
+    input.focus({ preventScroll: true });
+    refreshFullState(); pollCards();
+    if (pendingExpandCards) {
+      // the stage is visible now (renderConversation above): the batch's
+      // detail face takes the whole device, rows settle with the stagger
+      openDetail(pendingExpandCards);
+      pendingExpandCards = null;
+    }
+    if (queuedDraft) {
+      // Deterministic ordering: the queued correction -- or anything newer
+      // still sitting in the composer -- sends only now, after this reply
+      // was already rendered above.
+      const next = input.value.trim() || queuedDraft;
+      queuedDraft = null; renderQueue();
+      deliverChat(next);
+    } else {
+      sendBtn.textContent = "发送";
+    }
+  }
+}
+function sendChat() {
+  const text = input.value.trim();
+  if (!text) return;
+  if (chatBusy) { queueCorrection(text); return; }
+  sendBtn.textContent = "排队发送";
+  deliverChat(text);
+}
+sendBtn.onclick = sendChat;
+/* P18 Fix 02: IME-safe Enter. While a Chinese/Japanese input method is
+   composing, the Enter that confirms the current candidate must only commit
+   the composition -- never send, never queue a correction. Three independent
+   gates cover the engine order differences (W3C UI Events allows both
+   compositionend-before-keydown and keydown-before-compositionend):
+     1. live composition state (compositionstart/end),
+     2. KeyboardEvent.isComposing (modern engines incl. WebKit),
+     3. legacy keyCode 229 "IME processing" (old WebKit fallback).
+   No timers, no delays: only a genuine post-composition Enter reaches
+   sendChat (which routes busy -> queue exactly per Fix 01). */
+let composingText = false;
+input.addEventListener("compositionstart", () => { composingText = true; });
+input.addEventListener("compositionend", () => { composingText = false; });
+input.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    if (composingText || event.isComposing || event.keyCode === 229) return;
+    event.preventDefault(); sendChat();
+  }
+});
+$("queue-cancel").onclick = () => { queuedDraft = null; renderQueue(); input.focus(); };
+
+/* the four suggestion chips reuse the exact chat path: the text is proposed
+   through the same send entry point, so busy-routing (Fix 01) and the IME
+   guard apply unchanged. No new commands, no new semantics. */
+document.querySelectorAll(".shortcuts .chip").forEach((chip) => {
+  chip.onclick = () => { input.value = chip.textContent; sendBtn.onclick(); };
+});
+
+/* the trace restores the very batch it collapsed: the cached cards take
+   the stage through the standalone detail face, no fetch, no
+   recommendation run, no close button needed. P19-T9: the detail never
+   sits under a long prose paragraph, so a lingering full-prose reply
+   folds to its lead as the rows come back. */
+$("rec-trace").onclick = () => {
+  if (batchCache && batchCache.cards.length) {
+    convertStageReplyToLead();
+    openDetail(batchCache);
+  }
+};
+
+/* P19-T11c: the back chevron returns from the detail face to the
+   conversation at its exact scroll position -- the same collapseToTrace
+   the trace click already uses, so the cached batch survives untouched
+   (no fetch, no new recommendation run, batchCache never cleared) and
+   one trace click re-opens the very same rows. Never a greeting
+   resurrection: no stage class is touched here. */
+$("rec-back").onclick = () => {
+  collapseToTrace();
+  // P19-T17-A: focus must never scroll the conversation viewport, or it
+  // would clobber the scroll position collapseToTrace just restored.
+  input.focus({ preventScroll: true });
+};
+/* desktop extra: Escape returns from the detail face the same light way.
+   The IME gate reuses the Fix-01 composing state so a composition-cancel
+   Escape can never close anything, and the convo-stage check keeps the
+   key inert everywhere else (greeting, thinking, queued flow). */
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !composingText && expandedKey &&
+      !$("view-convo").classList.contains("off") && !document.body.classList.contains("is-thinking")) {
+    collapseToTrace();
+    input.focus({ preventScroll: true });
+  }
+});
+
+$("quit").onclick = async () => {
+  try { await post("/api/shutdown", {}); } catch (e) { /* server is going away */ }
+  document.body.innerHTML = '<div style="padding:80px;text-align:center;color:#a7a3bc">已退出，现在可以关闭这个窗口。</div>';
+};
+
+/* ---- heartbeat ----
+   Formal playback stays responsive at 2s through the cheap endpoint. The
+   expensive playback-context read is 10s while idle and temporarily returns
+   to 2s only while preview/suspension truth is active. Manual preview/chat
+   actions force one immediate full refresh, then this adaptive loop resumes. */
+setInterval(pollPlayerState, PLAYER_POLL_MS);
+setInterval(pollCards, 60000);
+refreshFullState();
+pollCards();
+/* === thinking particle engine (WAAPI, vanilla) === */
+/* P19-T2: addressable particles over the static CSS fog. Deterministic
+   (mulberry32 seed 20260824 -- no unseeded randomness), inert until
+   setThinking(true), generation-guarded so rapid true->false->true
+   flips can never leak nodes, leak animations, or remove a newer
+   generation's particles. Reduced motion and missing WAAPI both fall
+   back to a static composition with no persistent timers (the exit
+   belts are one-shots). Active motion (T8): the same centred grid
+   stagger, denser and re-tuned as one outward breath -- a fixed
+   19x19 regular grid (253 dots, 20px pitch, circular crop at 9
+   cells, 360px circle) where every dot waits its Euclidean grid
+   distance from the centre times 140ms, then swells once (scale
+   0.70-0.78 -> 1.20-1.35 and opacity 0.30-0.45 -> 0.85-1.00 over
+   500ms on true sine inOut, back down over 1000ms on true sine
+   out), holds at rest to the shared 3400ms loop end and starts
+   again: the centre swells first, a ring of larger brighter dots
+   rides outward, the field settles into a short full rest, and the
+   breath repeats. The whole field stays visible at rest. Scale and
+   element opacity are the ONLY animated properties; positions
+   (fixed grid seats), base sizes (5px), colours and the enter/exit
+   lifecycle are frozen. No rotation, no orbit, no translation, no
+   angle terms, no shrink-toward-zero, no randomisation of the
+   stagger -- the demo method, only denser and re-tuned. */
+const TP_MAX = 253;
+/* fixed regular grid -- the Anime.js 'Advanced Staggering' demo field,
+   densified: 19x19 at 20px cell pitch, circular crop at 9 cells:
+   exactly 253 dots in a 360px circle while every position stays a
+   grid point. Roles grade by grid distance from the centre (heart
+   < 3 cells, body <= 6.7, fringe beyond) plus twelve fixed pink
+   grid seats; the fog behind stays untouched and never joins the
+   stagger. */
+const TP_GRID_N = 19;         // grid extent per axis (9 cells each side of centre)
+const TP_GRID_CELL = 20;      // px pitch between grid neighbours
+const TP_GRID_KEEP = 9;       // cell-radius crop: keep the dot iff grid dist <= this
+const TP_STAGGER_STEP = 140;    // ms of stagger wait per grid unit from centre
+const TP_STAGGER_PERIOD = 3400; // ms shared loop: 500ms rise + 1000ms fall + stagger tail + soft full rest
+/* anime.js generates its easings programmatically (true sine inOut,
+   true sine out -- no beziers to copy): these are the fitted
+   cubic-beziers WAAPI evaluates, worst |dy| <= 0.001 (sub-pixel) */
+const TP_EASE_IN_OUT_SINE = "cubic-bezier(0.367, 0.002, 0.634, 1.000)";
+const TP_EASE_OUT_SINE = "cubic-bezier(0.387, 0.614, 0.664, 0.994)";
+/* twelve fixed warm grid seats (ix,iy in grid coordinates, centre
+   (9,9)): the T7 seat offsets resat on the denser field, with the
+   two innermost pushed out past the 3-cell heart radius */
+const TP_PINK_SEATS = { "7,5": 1, "10,5": 1, "13,6": 1, "13,9": 1, "12,12": 1, "10,13": 1, "7,13": 1, "5,12": 1, "5,9": 1, "5,6": 1, "11,12": 1, "8,12": 1 };
+const TP_HEART = { x: 250, y: 210 }; // px, 500x500 field space
+const TP_ROLE_COLORS = [
+  [[108, 96, 188], [122, 110, 202]],                                      // 0 fringe: deep mist purple
+  [[146, 127, 224], [134, 116, 214], [158, 142, 228], [168, 156, 234]],  // 1 body: mist purple (#927FE0 family)
+  [[232, 216, 242], [245, 240, 250], [222, 204, 238]],                   // 2 heart: lavender-white (#E8D8F2 family)
+  [[217, 142, 175], [229, 168, 192]],                                    // 3 pink: warm pink (#D98EAF family)
+];
+
+function tpRng(seed) { // mulberry32, standard flavor -- reproducible forever
+  let s = seed >>> 0;
+  return function () {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function tpJit(rng, u) { return (((rng() + rng() + rng()) / 3) - 0.5) * 2 * u; }
+function tpClamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+function tpR1(v) { return Math.round(v * 10) / 10; }
+
+/* deterministic particle table, built once at parse time: nothing here
+   animates. Row = [x, y, role, size, opacity, glow, gyre, R, flowPeriod,
+   breathePeriod, phaseA, phaseB, dir, colorIdx] -- the flow slots (6-9)
+   are parked at zero; T8 reads position plus the parked dynamics draws
+   (p[10..12] double as the seeded swell-envelope lerp fractions, so the
+   stagger keys stay a pure function of the row). Every dot holds one
+   stated size (5.0) and a rest opacity drawn in the 0.30-0.45 band:
+   the whole field reads visible at rest. Background alpha baked at 1. */
+const TP_PARTICLES = (function () {
+  const r = tpRng(20260824);
+  const pts = [];
+  function push(x, y, role, glow) {
+    const ci = (r() * TP_ROLE_COLORS[role].length) | 0;
+    const restO = 0.30 + r() * 0.15;   // seeded rest opacity, 0.30-0.45 band
+    pts.push([tpR1(x), tpR1(y), role, 5.0, restO, glow, 0, 0, 0, 0, 0, 0, 0, ci]);
+  }
+  /* one plain double loop over the grid -- positions are EXACT grid
+     points (no jitter, no spiral, no lanes: a dot is a grid seat, the
+     circle comes from the distance crop alone) and roles grade by grid
+     distance from the centre. Structural counts by construction, no
+     rejection loops anywhere in the table build */
+  for (let iy = 0; iy < TP_GRID_N; iy++) {
+    for (let ix = 0; ix < TP_GRID_N; ix++) {
+      const dx = ix - 9, dy = iy - 9;
+      const dist = Math.hypot(dx, dy);
+      if (dist > TP_GRID_KEEP) continue;
+      const role = dist < 3 ? 2                       // heart: the centre + its nearest two rings
+        : (TP_PINK_SEATS[ix + "," + iy] ? 3           // pink: twelve fixed warm grid seats
+          : (dist <= 6.7 ? 1 : 0));                   // body inside 6.7 cells, fringe beyond
+      push(TP_HEART.x + dx * TP_GRID_CELL, TP_HEART.y + dy * TP_GRID_CELL, role, role === 2 ? 1 : 0);
+    }
+  }
+  /* dynamics: only the fields the frozen lifecycle reads -- p[12] =
+     wave direction, p[11] = exit speed; p[10] stays parked (held at
+     its historical draw). The three line up as the seeded lerp
+     fractions the swell envelope derives from, so no additional
+     draw is needed. The retired flow slots stay zeroed */
+  for (const p of pts) {
+    p[6] = 0; p[7] = 0; p[8] = 0; p[9] = 0;
+    p[10] = r();
+    p[11] = r();
+    p[12] = r() * 6.2832;
+  }
+  return pts;
+})();
+
+/* capability probe + reduced motion, both read once; the engine adapts
+   below instead of assuming either */
+const TP_WAAPI = (function () {
+  try { return typeof Element !== "undefined" && typeof Element.prototype.animate === "function"; }
+  catch (e) { return false; }
+})();
+let TP_REDUCED_MQ = null;
+try {
+  TP_REDUCED_MQ = (typeof matchMedia === "function") ? matchMedia("(prefers-reduced-motion: reduce)") : null;
+} catch (e) { TP_REDUCED_MQ = null; }
+function tpReduced() { try { return !!(TP_REDUCED_MQ && TP_REDUCED_MQ.matches); } catch (e) { return false; } }
+
+let tpSystem = null;  // the active generation: { gen, nodes, anims, static, done }
+let tpExiting = null; // residual exiting generation awaiting release cleanup
+let tpGen = 0;
+let TP_BOX = null;
+function tpBox() {
+  if (!TP_BOX) TP_BOX = document.querySelector(".thinking-particles");
+  return TP_BOX;
+}
+function tpMakeNode(p) {
+  const c = TP_ROLE_COLORS[p[2]][p[13]];
+  const el = document.createElement("div");
+  el.className = "tp";
+  el.style.cssText =
+    "left:" + p[0] + "px;top:" + p[1] + "px;width:" + p[3] + "px;height:" + p[3] + "px;" +
+    "background:rgba(" + c[0] + "," + c[1] + "," + c[2] + ",1);" +
+    (p[5] ? "box-shadow:0 0 4px 1px rgba(" + c[0] + "," + c[1] + "," + c[2] + ",0.35);" : "");
+  return el;
+}
+/* the demo stagger, densified and re-tuned as one outward breath:
+   the ONE swell sequence every dot shares -- scale 0.70-0.78 and
+   opacity 0.30-0.45 at rest, one smooth bump to 1.20-1.35 /
+   0.85-1.00 over 500ms on true sine inOut, back to rest over
+   1000ms on true sine out, then a soft hold at rest to the loop
+   end (offsets are fractions of the shared 3400ms loop: 0.147 =
+   500ms, 0.441 = 1500ms). Envelope values are seeded per dot
+   from the parked dynamics draws, so this stays a pure function
+   of the row; the stagger lives entirely in each dot's start
+   offset, in grid order from the centre. Zero randomness in the
+   motion model, and the minimum scale anywhere is the rest scale
+   >= 0.70 -- the dots never shrink toward nothing. */
+function tpStaggerKeys(p) {
+  /* from='center' grid stagger exactly as anime computes it: Euclidean
+     grid distance from the centre x 140ms, as a fraction of the
+     shared loop. The centre dot waits nothing; each neighbour waits
+     one more step; the crest band spreads outward ring by ring and
+     the loop resets as one. Positions never move, scale + opacity
+     only -- no angle terms, no translation. */
+  const dx = (p[0] - TP_HEART.x) / TP_GRID_CELL;
+  const dy = (p[1] - TP_HEART.y) / TP_GRID_CELL;
+  const dist = Math.hypot(dx, dy);
+  const phase = dist * TP_STAGGER_STEP / TP_STAGGER_PERIOD;
+  const restS = 0.70 + 0.08 * p[11];                 // rest scale, 0.70-0.78
+  const peakS = 1.20 + 0.15 * (p[12] / 6.2832);      // peak scale, 1.20-1.35
+  const restO = p[4];                                // rest opacity, 0.30-0.45 (table build)
+  const peakO = 0.85 + 0.15 * p[10];                 // peak opacity, 0.85-1.00
+  const keys = [
+    { offset: 0,     transform: "scale(" + restS.toFixed(2) + ")", opacity: restO, easing: TP_EASE_IN_OUT_SINE },
+    { offset: 0.147, transform: "scale(" + peakS.toFixed(2) + ")", opacity: peakO, easing: TP_EASE_OUT_SINE },
+    { offset: 0.441, transform: "scale(" + restS.toFixed(2) + ")", opacity: restO },
+    { offset: 1,     transform: "scale(" + restS.toFixed(2) + ")", opacity: restO },
+  ];
+  return { x: tpR1(p[0]), y: tpR1(p[1]), phase: phase, period: TP_STAGGER_PERIOD, keys: keys };
+}
+function tpStaticCompose(sys) {
+  /* reduced-motion / no-WAAPI path: the deterministic density
+     composition, fully formed, zero animations and zero timers */
+  sys.static = true;
+  const box = tpBox();
+  if (!box) return;
+  const frag = document.createDocumentFragment();
+  for (const p of TP_PARTICLES) {
+    const el = tpMakeNode(p);
+    el.style.opacity = String(p[4]);
+    /* the static field IS the field at rest: hold the same swell-rest
+       scale the loop rests on, so reduce/re-enter never pops */
+    el.style.transform = tpStaggerKeys(p).keys[0].transform;
+    frag.appendChild(el);
+    sys.nodes.push(el);
+  }
+  box.appendChild(frag);
+}
+function tpMotionCompose(sys, rng) {
+  const box = tpBox();
+  if (!box) { sys.static = true; return; }
+  sys.static = false;
+  /* no per-activation motion randomness: the stagger tween is a fixed
+     port of the demo and identical every run -- the seeded stream only
+     drives the one-shot enter directions and delays below */
+  /* radial-out aggregation: the heart assembles first, fringe last */
+  const order = TP_PARTICLES.slice().sort(function (a, b) {
+    return Math.hypot(a[0] - TP_HEART.x, a[1] - TP_HEART.y) -
+           Math.hypot(b[0] - TP_HEART.x, b[1] - TP_HEART.y);
+  });
+  const frag = document.createDocumentFragment();
+  const rows = [];
+  for (let i = 0; i < order.length; i++) {
+    const p = order[i];
+    const w = tpStaggerKeys(p);
+    const el = tpMakeNode(p);
+    el.style.left = w.x + "px";
+    el.style.top = w.y + "px";
+    el._p = p;
+    el._f = w;
+    frag.appendChild(el);
+    sys.nodes.push(el);
+    rows.push([el, p, i]);
+  }
+  box.appendChild(frag);
+  for (let i = 0; i < rows.length; i++) {
+    const el = rows[i][0], p = rows[i][1], idx = rows[i][2];
+    const dist = 150 + rng() * 170;
+    const dx = Math.cos(p[12]) * dist, dy = Math.sin(p[12]) * dist;
+    const dur = 700 + rng() * 700;
+    const restT = el._f.keys[0].transform; // the dot's own rest scale: the enter lands exactly on the loop's rest key, so the handoff never pops
+    const enter = el.animate(
+      [
+        { transform: "translate(" + dx.toFixed(1) + "px, " + dy.toFixed(1) + "px) " + restT, opacity: 0.12 },
+        { transform: "translate(0px, 0px) " + restT, opacity: p[4] },
+      ],
+      {
+        duration: dur,
+        delay: idx * 4 + tpJit(rng, 180),
+        easing: "cubic-bezier(0.22, 0.61, 0.36, 1)",
+        fill: "backwards",
+      }
+    );
+    sys.anims.push(enter);
+    enter.onfinish = (function (sys2, el2, p2, w2, ev2) {
+      return function tpStartLoops() {
+        if (sys2.done || tpSystem !== sys2) return; // a stale generation stays dead
+        const k = sys2.anims.indexOf(ev2);
+        if (k >= 0) sys2.anims.splice(k, 1); // the enter animation is spent
+        /* the centred stagger takes over: exactly one loop per particle.
+           Every dot waits its grid-distance stagger inside the shared
+           loop (positive delay + backwards fill: it rests at its
+           swell-rest scale and opacity until its slot), plays the
+           same one-bump swell, holds, and the loop resets centre-first
+           again -- positions never move, scale + opacity are the only
+           animated properties */
+        sys2.anims.push(el2.animate(w2.keys, {
+          duration: w2.period, delay: w2.phase * w2.period,
+          fill: "backwards", iterations: Infinity,
+        }));
+      };
+    })(sys, el, p, el._f, enter);
+  }
+}
+function tpEnter() {
+  if (tpSystem) return;                      // exactly one particle system
+  if (tpExiting) tpTeardown(tpExiting);      // hard-cancel a residual exit first
+  const sys = { gen: ++tpGen, nodes: [], anims: [], static: false, done: false };
+  tpSystem = sys;
+  if (!TP_WAAPI || tpReduced()) { tpStaticCompose(sys); return; }
+  tpMotionCompose(sys, tpRng(20260824));     // per-activation seeded stream:
+                                             // every run plays the same wave
+}
+function tpExit() {
+  if (!tpSystem) return;
+  const sys = tpSystem;
+  tpSystem = null;                           // the slot is free immediately
+  tpExiting = sys;
+  if (sys.static) {
+    /* static compositions leave on a single short opacity fade (the
+       reduced-motion CSS owns the transition, if any) */
+    for (const node of sys.nodes) node.style.opacity = "0";
+    window.setTimeout(function () { tpTeardown(sys); }, 450);
+    return;
+  }
+  /* controlled release: outward drift + fade, 400-800ms per particle;
+     the belt below is a one-shot ceiling, not a poller */
+  for (const a of sys.anims) { try { a.onfinish = null; a.cancel(); } catch (e) { /* noop */ } }
+  sys.anims.length = 0;
+  for (const node of sys.nodes) {
+    const p = node._p;
+    if (!p) continue;
+    const dist = 120 + 60 * p[11];
+    const restT = node._f.keys[0].transform;
+    try {
+      /* explicit first keyframe: after the loop is cancelled nothing
+         would otherwise hold the rest scale/opacity, so the release
+         starts from the dot's exact swell rest -- no growth pop
+         during the fade-out */
+      const rel = node.animate(
+        [ { transform: "translate(0px, 0px) " + restT, opacity: p[4] }, { transform: "translate(" + (Math.cos(p[12]) * dist).toFixed(1) + "px, " + (Math.sin(p[12]) * dist).toFixed(1) + "px) " + restT, opacity: 0 } ],
+        { duration: 400 + 400 * p[11], easing: "ease-in", fill: "forwards" }
+      );
+      sys.anims.push(rel);
+    } catch (e) { node.style.opacity = "0"; }
+  }
+  window.setTimeout(function () { tpTeardown(sys); }, 1200);
+}
+function tpTeardown(sys) {
+  /* acts ONLY on the arrays captured by sys (its own nodes + anims);
+     it never touches the shared container wholesale, so a newer
+     generation's particles are untouchable from here */
+  if (!sys || sys.done) return;
+  sys.done = true;
+  const box = tpBox();
+  for (const a of sys.anims) { try { a.onfinish = null; a.cancel(); } catch (e) { /* noop */ } }
+  sys.anims.length = 0;
+  for (const node of sys.nodes) {
+    try { if (box && node.parentNode === box) box.removeChild(node); } catch (e) { /* noop */ }
+  }
+  sys.nodes.length = 0;
+  if (tpExiting === sys) tpExiting = null;
+}
+if (TP_REDUCED_MQ && typeof TP_REDUCED_MQ.addEventListener === "function") {
+  TP_REDUCED_MQ.addEventListener("change", function () {
+    if (!tpSystem) return;
+    const sys = tpSystem;
+    tpSystem = null;
+    tpTeardown(sys);
+    tpEnter(); // recompose under the new preference: static or motion
+  });
+}
+/* === end thinking particle engine === */
+
+</script>
+</body>
+</html>

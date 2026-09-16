@@ -1,0 +1,267 @@
+{
+  "case_results": [
+    {
+      "eval_case_id": "ACPT-P22-ROUTE-001",
+      "parent_task_id": null,
+      "name": "Deterministic Playback Command",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "task",
+      "automated_result": "PASS",
+      "owner_uat_result": "PASS",
+      "owner_uat_required_for_case": true,
+      "failure_layer": null,
+      "root_cause_status": "resolved_and_verified",
+      "wrong_action": false,
+      "action_executed": true,
+      "evidence": [
+        {
+          "kind": "historical_regression",
+          "reference": "eval/runs/P22-S1.12-ROUTE-REGRESSION.md",
+          "notes": "Controlled route regression artifact; current project state separately records P22-S1.12 as VERIFIED."
+        },
+        {
+          "kind": "owner_current_state",
+          "reference": "P22-S1.12 VERIFIED",
+          "notes": "Owner-supplied current project baseline."
+        }
+      ],
+      "notes": [
+        "Closed playback quartet is treated as the current verified route baseline; this Eval slice does not re-execute Music.app."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-CTX-004",
+      "parent_task_id": null,
+      "name": "Conversational Continuation / Pending Action",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "task",
+      "automated_result": "PASS",
+      "owner_uat_result": "PASS",
+      "owner_uat_required_for_case": true,
+      "failure_layer": null,
+      "root_cause_status": "resolved_and_verified",
+      "wrong_action": false,
+      "action_executed": true,
+      "evidence": [
+        {
+          "kind": "owner_uat",
+          "reference": "P22-S2.1 Follow-up 3 Owner UAT",
+          "notes": "Scenarios A-F all PASS, including decline+override, explicit-index Preview acceptance, and replay protection."
+        },
+        {
+          "kind": "engineering_regression",
+          "reference": "P22-S2.1 Follow-up 3",
+          "notes": "Targeted regression 1686/1686 PASS; full regression 5421/5421 PASS."
+        }
+      ],
+      "notes": [
+        "Structured OfferedAction continuation is verified across scenarios A-F."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-CTX-004-A",
+      "parent_task_id": "ACPT-P22-CTX-004",
+      "name": "Named target acceptance",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "scenario",
+      "automated_result": "PASS",
+      "owner_uat_result": "PASS",
+      "owner_uat_required_for_case": true,
+      "failure_layer": null,
+      "root_cause_status": "verified",
+      "wrong_action": false,
+      "action_executed": true,
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/test_web_shell.py::test_s21_followup_structured_named_play_offer_arms_session_and_accepts_exact_target"
+        },
+        {
+          "kind": "test",
+          "reference": "tests/test_chat_session.py::test_s21_followup_structured_named_play_offer_arms_session_and_accepts_exact_target"
+        },
+        {
+          "kind": "owner_uat",
+          "reference": "播放地球最后一夜 → 开始试听",
+          "notes": "Owner reports exact same target Preview PASS."
+        }
+      ],
+      "notes": [
+        "Exact target identity is preserved across the pending offer continuation."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-CTX-004-B",
+      "parent_task_id": "ACPT-P22-CTX-004",
+      "name": "Acceptance synonym",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "scenario",
+      "automated_result": "PASS",
+      "owner_uat_result": "PASS",
+      "owner_uat_required_for_case": true,
+      "failure_layer": null,
+      "root_cause_status": "verified",
+      "wrong_action": false,
+      "action_executed": true,
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/test_conversation_continuation.py::OfferedActionRegisterTest.test_generic_and_preview_specific_acceptance_consume_exact_offer"
+        },
+        {
+          "kind": "test",
+          "reference": "tests/test_web_shell.py::test_s21_followup_structured_named_play_offer_arms_session_and_accepts_exact_target",
+          "notes": "Web integration uses 可以 and exact canonical."
+        },
+        {
+          "kind": "owner_uat",
+          "reference": "播放第二首 → Preview offer → 好的",
+          "notes": "Acceptance synonym consumes the exact target offer and starts the same target Preview."
+        }
+      ],
+      "notes": [
+        "Automated evidence exists for 好的/可以/试听吧 semantics; no current Owner UAT result is claimed."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-CTX-004-C",
+      "parent_task_id": "ACPT-P22-CTX-004",
+      "name": "Decline",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "scenario",
+      "automated_result": "PASS",
+      "owner_uat_result": "PASS",
+      "owner_uat_required_for_case": true,
+      "failure_layer": null,
+      "root_cause_status": "verified",
+      "wrong_action": false,
+      "action_executed": false,
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/test_conversation_continuation.py::OfferedActionRegisterTest.test_pure_decline_consumes_without_action"
+        },
+        {
+          "kind": "test",
+          "reference": "tests/test_web_shell.py::test_s21_decline_consumes_without_action_and_second_accept_cannot_replay"
+        },
+        {
+          "kind": "owner_uat",
+          "reference": "Preview offer → 不用 → 好的",
+          "notes": "Pure decline consumes the offer without action; subsequent 好的 does not replay it."
+        }
+      ],
+      "notes": [
+        "Automated decline/consume behavior is covered; current Owner UAT is not recorded."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-CTX-004-D",
+      "parent_task_id": "ACPT-P22-CTX-004",
+      "name": "Decline plus explicit override",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "scenario",
+      "automated_result": "PASS",
+      "owner_uat_result": "PASS",
+      "owner_uat_required_for_case": true,
+      "failure_layer": null,
+      "root_cause_status": "verified",
+      "wrong_action": false,
+      "action_executed": false,
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/test_web_shell.py::test_s21_substantive_new_request_wins_and_expires_pending_offer"
+        },
+        {
+          "kind": "owner_uat",
+          "reference": "不用，播放第二首",
+          "notes": "Owner reports old offer expires and explicit new request wins."
+        },
+        {
+          "kind": "owner_uat",
+          "reference": "播放地球最后一夜 → 不用，播放第4首 → 好的",
+          "notes": "Old offer expires; replacement request produces the exact fourth-target Preview offer, which is then accepted."
+        }
+      ],
+      "notes": [
+        "The old pending offer is not consumed as a pure decline when a substantive new request is present."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-CTX-004-E",
+      "parent_task_id": "ACPT-P22-CTX-004",
+      "name": "Chained explicit-index Preview offer",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "scenario",
+      "automated_result": "PASS",
+      "owner_uat_result": "PASS",
+      "owner_uat_required_for_case": true,
+      "failure_layer": null,
+      "root_cause_status": "verified",
+      "wrong_action": false,
+      "action_executed": true,
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "P22-S2.1 Follow-up 3 targeted regression",
+          "notes": "Relevant provider/WebShell/chat-session/continuation/router suites passed 1686/1686."
+        },
+        {
+          "kind": "owner_uat",
+          "reference": "播放第二首 → 《Seiten》— Totalfat Preview offer → 好的",
+          "notes": "Exact second target Preview starts; no fallback to ordinary chat."
+        }
+      ],
+      "notes": [
+        "Previously failing explicit-index continuation now produces, arms, consumes, and executes the exact structured OfferedAction."
+      ]
+    },
+    {
+      "eval_case_id": "ACPT-P22-CTX-004-F",
+      "parent_task_id": "ACPT-P22-CTX-004",
+      "name": "Consumed offer replay protection",
+      "type": "Extension",
+      "priority": "P0",
+      "scope": "scenario",
+      "automated_result": "PASS",
+      "owner_uat_result": "PASS",
+      "owner_uat_required_for_case": true,
+      "failure_layer": null,
+      "root_cause_status": "verified",
+      "wrong_action": false,
+      "action_executed": true,
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/test_conversation_continuation.py::OfferedActionRegisterTest.test_accepted_offer_is_consumed_exactly_once"
+        },
+        {
+          "kind": "test",
+          "reference": "tests/test_web_shell.py::test_s21_failed_acceptance_is_consumed_and_never_replayed"
+        },
+        {
+          "kind": "owner_uat",
+          "reference": "Preview offer → 好的 → Preview executes → 好的 again",
+          "notes": "Consumed offer is not replayed; second 好的 falls through to ordinary conversation."
+        }
+      ],
+      "notes": [
+        "Automated consume-once behavior is verified; no current Owner UAT result is claimed."
+      ]
+    }
+  ],
+  "engineering_regression": {
+    "status": "PASS",
+    "passed": 5421,
+    "total": 5421,
+    "notes": "Real-Mac P22-S2.1 Follow-up 3 verification. Targeted regression 1686/1686 PASS. Full regression run #2 5421/5421 PASS. Run #1 had one isolated non-reproducible agent_socket_host timing error; the exact case subsequently passed 10/10 and the socket module passed 19/19."
+  }
+}

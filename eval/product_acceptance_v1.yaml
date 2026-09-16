@@ -1,0 +1,1228 @@
+schema_version: 1
+eval_corpus_version: p22-product-acceptance-v1
+purpose: Map fixed product acceptance tasks onto the existing verification backbone; do not duplicate engineering tests.
+baseline_reference:
+  phase: P22-S1.11 verified
+  product_version: 0.1.0
+  git_head: ec55a03
+  worktree_state_id:
+    algorithm: sha256-manifest-v1
+    value: sha256-manifest-v1:bdae579fed099fbc98a2d169ca0420c81f9876a97d8d6e5c004e35b3da0698fa
+    scope:
+    - src/**
+    - app/**
+    - tests/**
+    - tools/**
+    - pyproject.toml
+    - README.md
+    - AGENTS.md
+    excluded:
+    - .git/**
+    - eval/**
+    - '**/__pycache__/**'
+    - '**/.build/**'
+    - '**/.pytest_cache/**'
+    - '*.pyc'
+    - reports/patch artifacts outside the product scope
+    construction: Sort scoped file paths; for each path append path + NUL + SHA256(file bytes) + newline; SHA256 the resulting
+      manifest. Eval files are excluded to avoid self-reference.
+  verified_engineering_regression: 5374 / 5374 tests OK on real macOS (owner-supplied baseline)
+reproducibility_metadata:
+  required_per_eval_run:
+  - product_version
+  - git_head
+  - worktree_state_id
+  - eval_corpus_version
+  - platform
+  - python_version
+  - provider
+  - model
+  - database_fixture_or_state_snapshot
+  capture_policy:
+    product_version: read from project version at run time
+    git_head: git rev-parse HEAD at run time; never use alone as product identity
+    worktree_state_id: compute external content identity with the algorithm above
+    eval_corpus_version: use this file value
+    platform: capture at eval run; unavailable until run
+    python_version: capture at eval run; unavailable until run
+    provider: capture at eval run; N/A for deterministic-only cases
+    model: capture at eval run; N/A for deterministic-only cases
+    database_fixture_or_state_snapshot: record fixture DB/state snapshot ID or mark unavailable with reason
+coverage_status_values:
+- COVERED
+- PARTIAL
+- GAP
+- UAT-ONLY
+- NOT-APPLICABLE
+failure_layers:
+- Intent
+- Context
+- Authority
+- Selection
+- Tool
+- Execution
+- Readback
+- Presentation
+- Observability
+- Eval Infrastructure
+evidence_schema:
+  fields:
+    eval_case_id: provided by Product Eval layer; currently unavailable in production runtime
+    product_version: external run metadata
+    run_id: RecommendationRun when applicable
+    turn_id: unavailable as a unified runtime field
+    input: Product Eval case input
+    precondition: Product Eval case metadata
+    expected_behavior: Product Eval case metadata
+    actual_intent: TurnPlan/interpreter result; currently mostly in-process
+    actual_route: router/fast-path decision; currently mostly in-process
+    relevant_context: ActiveMusicContext + request/run context where available
+    selected_target: SelectionGrant/ActionAttempt or workflow-selected canonical when applicable
+    selection_authority: derive from SelectionGrant/code path; not a first-class durable field
+    selection_grant: in-memory SelectionGrant when applicable
+    tool_name: AgentRequestJournalRepository
+    tool_parameters: AgentRequestJournalRepository request payload
+    tool_result: AgentRequestJournalRepository result
+    preview_or_playback_eligibility: capability/binding/runtime evidence when applicable
+    executed_target: action tool canonical target when applicable
+    readback_target: get_now_playing / ActionAttempt readback when applicable
+    final_state: ActionAttempt/runtime state; not unified durably
+    final_response: Provider/Web/CLI result; not unified durably
+    retry_count: derive from ProviderRunTrace/tool sequence
+    latency_ms: ProviderRunTrace/tool measures when instrumentation is enabled
+    automated_result: eval adapter/test result
+    owner_uat_result: Product Eval/UAT record; historical UAT is not yet keyed by eval_case_id
+    failure_layer: Product Eval classification
+    root_cause_status: Product Eval/UAT triage classification
+  real_action_identity_rule: intended target == selected target == executed target == readback target == user-visible verified
+    target; if any required equality is unavailable, do not mark the real action as verified success.
+tasks:
+- task_id: ACPT-REC-001
+  name: Scene-based Recommendation
+  category: Recommendation
+  type: Core
+  priority: P0
+  input:
+  - 推荐几首适合晚上听的歌
+  - 我喜欢 IU，推荐几首适合晚上听的歌
+  precondition:
+  - recommendation execution available
+  - catalog/library state is a controlled or known fixture
+  required_context:
+  - current user scene constraint
+  - current session context
+  - long-term preference only as supporting context
+  expected_behavior:
+  - enter recommendation path
+  - preserve the current scene constraint through recommendation semantics
+  - use current scene/session constraints ahead of unrelated historical preference
+  - return real available candidates or fail closed
+  expected_intent: recommendation
+  expected_tool_behavior:
+  - use existing recommendation generation/discovery tools only
+  - do not invent unsupported candidate capability
+  expected_state_behavior:
+  - scene is turn/session-scoped unless separately expressed as durable preference
+  - RecommendationRun owns delivered result identity
+  expected_output:
+  - user-visible recommendation batch grounded in the authoritative run
+  - honest no-result if no eligible candidates
+  must_not:
+  - recommend only from unrelated long-term preference while ignoring explicit scene
+  - fabricate candidate or capability
+  - persist the temporary scene as long-term preference
+  pass_criteria:
+  - routing is recommendation
+  - scene survives semantic resolution
+  - authoritative result is real and user-visible output uses that result
+  fail_criteria:
+  - scene is dropped or contradicted
+  - unrelated history overrides explicit scene
+  - fabricated or unavailable candidate is presented as valid
+  automation_level: partial_existing_automated
+  owner_uat_required: conditional
+  evidence_requirements:
+  - intent/routing
+  - relevant current context
+  - recommendation run/result set
+  - final response
+  existing_tests:
+  - file: tests/test_intent_router.py
+    case: S3TaskSurfaceClassificationTest.test_explicit_recommendation_semantics_are_distinct
+  - file: tests/test_intent_router.py
+    case: S3TaskSurfaceClassificationTest.test_recommendation_request_covers_closed_set_and_direction_form
+  - file: tests/test_provider_agent.py
+    case: ProviderAgentLoopTest.test_explicit_seed_replaces_model_target_but_preserves_scene_arguments
+  - file: tests/test_provider_agent.py
+    case: ProviderAgentLoopTest.test_preference_scene_empty_pool_expands_catalog_then_retries
+  runtime_evidence:
+  - source: TurnPlan / recommendation semantics
+    availability: in_process_only
+    fields:
+    - actual_intent
+    - scene
+  - source: RecommendationRun / RecommendationHistoryRepository
+    availability: available
+    fields:
+    - run_id
+    - request
+    - items
+  - source: AgentRequestJournalRepository
+    availability: available
+    fields:
+    - tool_name
+    - tool_parameters
+    - tool_result
+  evidence_gaps:
+  - no single product-level assertion proves final semantic scene fit versus unrelated long-term preference
+  - final_response is not durably joined to a product eval case
+  coverage_status: PARTIAL
+  gap_categories:
+  - Context
+  - Presentation
+  - Eval Infrastructure
+  confidence: HIGH
+  regression_candidate: Future minimal product-level scene-priority case; do not duplicate existing routing/propagation tests.
+- task_id: ACPT-REC-002
+  name: Mood-based Recommendation
+  category: Recommendation
+  type: Core
+  priority: P0
+  input:
+  - 推荐点轻松的
+  - 换个心情
+  precondition:
+  - recommendation path is available
+  required_context:
+  - current mood/direction wording
+  - current session state
+  expected_behavior:
+  - treat mood as current-turn intent
+  - return results compatible with current mood without unnecessary clarification
+  - keep mood temporary unless explicitly stated as durable preference
+  expected_intent: recommendation
+  expected_tool_behavior:
+  - translate supported direction into existing recommendation/discovery constraints without claiming unsupported filtering
+  expected_state_behavior:
+  - do not mutate long-term preference solely because of a temporary mood request
+  expected_output:
+  - recommendation or honest no-result aligned with current mood/direction
+  must_not:
+  - require artist/track for a reasonable mood recommendation
+  - automatically write temporary mood into long-term preference
+  pass_criteria:
+  - mood/direction routes to recommendation
+  - no unnecessary clarification
+  - no long-term preference mutation caused solely by this turn
+  fail_criteria:
+  - mood is ignored or misrouted
+  - temporary mood becomes durable preference
+  - model claims unsupported attribute filtering
+  automation_level: partial_existing_automated
+  owner_uat_required: conditional
+  evidence_requirements:
+  - parsed intent
+  - effective constraints
+  - recommendation result set
+  - preference mutation absence
+  existing_tests:
+  - file: tests/test_intent_router.py
+    case: S3TaskSurfaceClassificationTest.test_recommendation_request_covers_closed_set_and_direction_form
+  - file: tests/test_intent_router.py
+    case: S3TaskSurfaceClassificationTest.test_direction_control_keeps_its_existing_compatibility_shape
+  - file: tests/test_provider_agent.py
+    case: DefaultSystemPromptRecommendationExperienceContractTest.test_direction_maps_to_genres_or_search_terms
+  runtime_evidence:
+  - source: TurnPlan / recommendation semantics
+    availability: in_process_only
+    fields:
+    - actual_intent
+    - direction_or_scene
+  - source: AgentRequestJournalRepository
+    availability: available
+    fields:
+    - tool_name
+    - tool_parameters
+    - tool_result
+  - source: PreferencePersistenceRepository
+    availability: available
+    fields:
+    - durable preference evidence
+    notes: Can prove mutations that do occur; absence still needs case-level before/after comparison.
+  evidence_gaps:
+  - mood is not a first-class durable eval field
+  - no fixed product-level non-persistence acceptance case
+  coverage_status: PARTIAL
+  gap_categories:
+  - Intent
+  - Context
+  - Eval Infrastructure
+  confidence: HIGH
+  regression_candidate: Future minimal mood/non-persistence product case if P22 product contract freezes this behavior.
+- task_id: ACPT-REC-003
+  name: Similarity
+  category: Recommendation / Context
+  type: Core
+  priority: P0
+  input:
+  - 找类似这首的
+  - 给我找几首和 Spring Thief 差不多的
+  precondition:
+  - for current-track form, strict current player canonical is available; otherwise clarification is expected
+  required_context:
+  - referenced object or strict current-player canonical
+  - active/current recommendation ownership when relevant
+  expected_behavior:
+  - resolve a unique referent and enter similarity path
+  - fail closed or clarify when referent is unavailable/ambiguous
+  - exclude the seed from delivered candidates
+  expected_intent: recommendation.similarity
+  expected_tool_behavior:
+  - bind similarity seed from code-owned canonical identity
+  - use existing similarity/inferred generation path
+  expected_state_behavior:
+  - preserve current run ownership and seed basis
+  expected_output:
+  - similarity-driven real candidates excluding the seed
+  must_not:
+  - guess an ambiguous seed
+  - return the seed as the recommendation result
+  - let global preference masquerade as similarity
+  pass_criteria:
+  - strict seed is bound
+  - seed is excluded
+  - run lifecycle records similarity source/seed basis
+  fail_criteria:
+  - ambiguous/missing seed executes anyway
+  - seed leaks into delivered result
+  - result ownership drifts
+  automation_level: strong_existing_automated
+  owner_uat_required: conditional
+  evidence_requirements:
+  - referenced object resolution
+  - current result ownership
+  - intent
+  - RecommendationRun/result set
+  existing_tests:
+  - file: tests/test_turn_interpreter.py
+    case: TurnInterpreterTest.test_similarity_forms_map_only_raw_referent_semantics
+  - file: tests/test_turn_interpreter.py
+    case: TurnInterpreterTest.test_current_track_similarity_requires_verified_current_playback_even_with_referenced_item
+  - file: tests/test_provider_agent.py
+    case: ProviderAgentLoopTest.test_current_track_similarity_preserves_non_seed_candidates_but_excludes_seed
+  - file: tests/test_provider_agent.py
+    case: ProviderAgentLoopTest.test_current_track_similarity_unresolved_seed_fails_closed
+  - file: tests/test_true_similarity.py
+    case: TrueSimilarityServiceTest.test_higher_seed_similarity_outranks_stronger_personal_preference
+  - file: tests/test_true_similarity.py
+    case: TrueSimilarityServiceTest.test_run_lifecycle_source_and_seed_basis_are_preserved
+  runtime_evidence:
+  - source: ActiveMusicContext
+    availability: available
+    fields:
+    - strict current player canonical
+    - active recommendation reference
+  - source: RecommendationRun
+    availability: available
+    fields:
+    - run_id
+    - request source
+    - seed basis
+    - items
+  - source: AgentRequestJournalRepository
+    availability: available
+    fields:
+    - tool_name
+    - tool_parameters
+    - tool_result
+  evidence_gaps:
+  - no unified eval_case_id joins semantic, run, final response and UAT evidence
+  coverage_status: COVERED
+  gap_categories:
+  - Eval Infrastructure
+  confidence: HIGH
+  regression_candidate: null
+- task_id: ACPT-DIS-001
+  name: Discovery
+  category: Discovery
+  type: Core
+  priority: P0
+  input:
+  - 推荐一些我没听过的新歌
+  precondition:
+  - catalog discovery capability available
+  required_context:
+  - fresh/discovery intent
+  - catalog/library binding state
+  expected_behavior:
+  - enter catalog discovery
+  - use conservative verifiable new/fresh semantics
+  - preserve source/availability truth
+  expected_intent: discovery
+  expected_tool_behavior:
+  - use discover_catalog_tracks and existing promotion/generation path
+  - keep catalog-only vs library/playback capability distinct
+  expected_state_behavior:
+  - fresh/discovered source remains explicit; no unsupported playback upgrade
+  expected_output:
+  - real discovered candidates with honest availability wording
+  must_not:
+  - claim the user has never heard a track without evidence
+  - treat catalog-only as formal-playback capable by default
+  pass_criteria:
+  - discovery route is used
+  - source/availability are preserved
+  - final wording is evidence-grounded
+  fail_criteria:
+  - invented never-heard claim
+  - catalog candidate is silently promoted to formal playback capability
+  automation_level: strong_existing_automated
+  owner_uat_required: sample_or_conditional
+  evidence_requirements:
+  - discovery route
+  - catalog tool result
+  - candidate source/availability
+  - final wording
+  existing_tests:
+  - file: tests/test_intent_router.py
+    case: S3TaskSurfaceClassificationTest.test_library_absence_wording_routes_to_fresh_discovery_not_artist
+  - file: tests/test_intent_router.py
+    case: S3TaskSurfaceClassificationTest.test_fresh_discovery_closed_set
+  - file: tests/test_provider_agent.py
+    case: FreshPromotionEndToEndTest.test_discover_promote_generate_min_fresh_end_to_end
+  - file: tests/test_agent_service.py
+    case: FreshDrivenChannelIntegrationTest.test_zero_affinity_fresh_reaches_batch_via_channel
+  runtime_evidence:
+  - source: AgentRequestJournalRepository
+    availability: available
+    fields:
+    - discover_catalog_tracks request/result
+  - source: RecommendationRun
+    availability: available
+    fields:
+    - run_id
+    - candidate source
+    - items
+  - source: CatalogTrackStateRepository
+    availability: available
+    fields:
+    - binding/source availability
+  evidence_gaps:
+  - fixed product-eval snapshot does not yet aggregate discovery route + final wording
+  coverage_status: COVERED
+  gap_categories:
+  - Eval Infrastructure
+  confidence: HIGH
+  regression_candidate: null
+- task_id: ACPT-CTX-001
+  name: Current Intent vs Long-term Preference
+  category: Context / Preference
+  type: Core
+  priority: P0
+  input:
+  - 找类似这首的
+  - 推荐几首适合晚上听的歌
+  precondition:
+  - historical preference evidence may exist
+  required_context:
+  - current explicit intent
+  - long-term preference evidence
+  expected_behavior:
+  - current intent dominates conflicting/unrelated historical preference
+  - long-term preference acts only as supporting context
+  - temporary constraints do not become durable preference
+  expected_intent: varies by input; current-turn semantic must remain authoritative
+  expected_tool_behavior:
+  - use preference evidence only where compatible with current intent
+  expected_state_behavior:
+  - no implicit durable preference mutation from temporary request
+  expected_output:
+  - result consistent with current request, with preference only as support
+  must_not:
+  - override current explicit request with historical preference
+  pass_criteria:
+  - current semantic drives result; preference only tiebreaks/supports where allowed
+  fail_criteria:
+  - historical preference changes the task or masks similarity/scene intent
+  automation_level: partial_existing_automated
+  owner_uat_required: sample_or_conditional
+  evidence_requirements:
+  - current intent
+  - long-term preference
+  - effective constraints
+  - final result
+  existing_tests:
+  - file: tests/test_true_similarity.py
+    case: TrueSimilarityServiceTest.test_higher_seed_similarity_outranks_stronger_personal_preference
+  - file: tests/test_true_similarity.py
+    case: TrueSimilarityServiceTest.test_global_favorite_cannot_masquerade_as_seed_similarity
+  - file: tests/test_true_similarity.py
+    case: TrueSimilarityServiceTest.test_equal_similarity_uses_positive_preference_tiebreak
+  - file: tests/test_catalog_recommendation.py
+    case: CatalogRecommendationTest.test_unrelated_ambient_preferences_pass_through_and_rank
+  runtime_evidence:
+  - source: TurnPlan
+    availability: in_process_only
+    fields:
+    - actual current intent
+  - source: RecommendationRequest / RecommendationRun
+    availability: available
+    fields:
+    - preference inputs
+    - result items
+  - source: PreferencePersistenceRepository
+    availability: available
+    fields:
+    - long-term preference evidence
+  evidence_gaps:
+  - priority is strongly proven for similarity but not by one general scene/mood acceptance case
+  - turn intent is not durable evidence
+  coverage_status: PARTIAL
+  gap_categories:
+  - Context
+  - Observability
+  confidence: HIGH
+  regression_candidate: Future general current-intent-priority acceptance case, reusing existing fixtures.
+- task_id: ACPT-CTX-002
+  name: Continuous Adjustment
+  category: Context / Multi-turn
+  type: Core
+  priority: P0
+  input:
+  - 换一组
+  - 换个方向
+  - 再找一些类似这首的
+  precondition:
+  - active/current RecommendationRun exists
+  required_context:
+  - active run
+  - current session constraints
+  - referent/authority state
+  expected_behavior:
+  - read active/current run
+  - apply new constraint to current result lineage
+  - preserve run/selection authority
+  - avoid accidental reset to unrelated request
+  expected_intent: continuation or recommendation adjustment
+  expected_tool_behavior:
+  - reuse authoritative active batch/run context where contract requires
+  expected_state_behavior:
+  - new run replaces/advances current state intentionally; long-term preference unchanged unless explicitly mutated
+  expected_output:
+  - new/adjusted result grounded in the active context
+  must_not:
+  - silently switch ownership to stale run
+  - reset into unrelated request
+  - mutate long-term preference without explicit signal
+  pass_criteria:
+  - active run is authoritative
+  - new constraint is applied
+  - ownership stays coherent
+  fail_criteria:
+  - stale run/referent used
+  - constraint lost
+  - authority drift
+  automation_level: strong_existing_automated
+  owner_uat_required: true
+  evidence_requirements:
+  - current session
+  - active run
+  - authority/ownership
+  - new constraints
+  - result set
+  existing_tests:
+  - file: tests/test_provider_agent.py
+    case: DefaultSystemPromptSwapContextContractTest.test_recommendation_state_swap_reuses_the_batch
+  - file: tests/test_provider_agent.py
+    case: DefaultSystemPromptBatchContextContractTest.test_active_batch_is_the_unified_batch_locator
+  - file: tests/test_provider_agent.py
+    case: S2FinalAnswerRoundTest.test_choose_another_progresses_deterministically_then_exhausts
+  - file: tests/test_active_music_context.py
+    case: BatchContextTest.test_recommendation_batch_replaces_previous_and_restarts_index
+  - file: tests/test_active_music_context.py
+    case: VerifiedSelectionTest.test_new_run_clears_old_verified_selections
+  runtime_evidence:
+  - source: ActiveMusicContext
+    availability: available
+    fields:
+    - active batch
+    - referent
+    - verified selections
+  - source: RecommendationHistoryRepository
+    availability: available
+    fields:
+    - run_id
+    - run items
+  - source: AgentRequestJournalRepository
+    availability: available
+    fields:
+    - tool calls/results
+  evidence_gaps:
+  - Owner UAT evidence is historical prose rather than keyed acceptance evidence
+  coverage_status: COVERED
+  gap_categories:
+  - Eval Infrastructure
+  confidence: HIGH
+  regression_candidate: null
+- task_id: ACPT-CTX-003
+  name: Ambiguous Context
+  category: Context / Clarification
+  type: Core
+  priority: P0
+  input:
+  - 播放它
+  - 找类似这首的
+  precondition:
+  - referent is ambiguous or required context is unavailable
+  required_context:
+  - referent resolution candidates
+  - active player/recommendation context
+  expected_behavior:
+  - continue when uniquely resolvable
+  - clarify/fail closed when not uniquely resolvable
+  - perform no unauthorized action
+  expected_intent: clarification when ambiguity remains
+  expected_tool_behavior:
+  - do not execute play/preview/mutate while target is ambiguous
+  expected_state_behavior:
+  - no action state mutation on unresolved ambiguity
+  expected_output:
+  - clarification or honest inability to resolve
+  must_not:
+  - guess target
+  - execute unauthorized action
+  pass_criteria:
+  - ambiguous case reaches clarification/fail-closed and tool execution stays absent
+  fail_criteria:
+  - any ambiguous target is executed or presented as verified
+  automation_level: strong_existing_automated
+  owner_uat_required: false
+  evidence_requirements:
+  - object resolution
+  - ambiguity state
+  - absence/action attempt
+  - final response
+  existing_tests:
+  - file: tests/test_turn_interpreter.py
+    case: TurnInterpreterTest.test_ambiguous_model_result_becomes_clarification
+  - file: tests/test_turn_interpreter.py
+    case: TurnInterpreterTest.test_context_can_fail_closed_for_missing_active_recommendation
+  - file: tests/test_provider_agent.py
+    case: ProviderAgentLoopTest.test_interpreter_failure_clarifies_without_entering_tool_loop
+  - file: tests/test_playback_tools.py
+    case: PlaybackToolsTest.test_play_track_resolver_ambiguous_fails_closed
+  runtime_evidence:
+  - source: TurnPlan / clarification result
+    availability: in_process_only
+    fields:
+    - ambiguity/clarification
+  - source: AgentRequestJournalRepository
+    availability: available
+    fields:
+    - absence or failed action invocation
+    - tool_result
+  evidence_gaps:
+  - final clarification text is not durably joined to the case
+  coverage_status: COVERED
+  gap_categories:
+  - Presentation
+  - Eval Infrastructure
+  confidence: HIGH
+  regression_candidate: null
+- task_id: ACPT-FAIL-001
+  name: No Candidate
+  category: Failure / Fallback
+  type: Core
+  priority: P0
+  input:
+  - 推荐几首歌
+  precondition:
+  - controlled fixture has no eligible candidate or exclusions exhaust the pool
+  required_context:
+  - candidate set/exclusion diagnostics
+  expected_behavior:
+  - return explicit no-result/fallback
+  - fail closed
+  - offer only real executable alternatives
+  expected_intent: recommendation
+  expected_tool_behavior:
+  - generation returns typed empty diagnostics; no fabricated run for true empty result
+  expected_state_behavior:
+  - empty result does not pollute recommendation history when service contract says no run
+  expected_output:
+  - honest fixed/grounded no-result response
+  must_not:
+  - fabricate songs
+  - present unavailable candidate as actionable
+  pass_criteria:
+  - empty candidate diagnostics are truthful
+  - no unauthorized action/run
+  - fallback is honest
+  fail_criteria:
+  - fabricated candidate/result
+  - false success
+  automation_level: strong_existing_automated
+  owner_uat_required: false
+  evidence_requirements:
+  - candidate set
+  - no-result state
+  - final response
+  - absence of unauthorized action
+  existing_tests:
+  - file: tests/test_agent_service.py
+    case: SharedAgentServiceTest.test_empty_generate_is_refused_and_never_persisted
+  - file: tests/test_agent_service.py
+    case: SharedAgentServiceTest.test_empty_inferred_generate_is_refused_without_history_pollution
+  - file: tests/test_provider_agent.py
+    case: ProviderAgentLoopTest.test_generic_inferred_recovery_failure_uses_fixed_closeout
+  - file: tests/test_web_shell.py
+    case: WebShellAppTest.test_natural_target_recommendation_without_generation_hits_same_honest_door
+  runtime_evidence:
+  - source: AgentRequestJournalRepository
+    availability: available
+    fields:
+    - tool_result
+    - error_code
+    - error_message
+  - source: RecommendationHistoryRepository
+    availability: available
+    fields:
+    - absence/presence of run
+  - source: ProviderAgentResult / Web response
+    availability: in_process_only
+    fields:
+    - final_response
+  evidence_gaps:
+  - final response is not durable eval evidence
+  coverage_status: COVERED
+  gap_categories:
+  - Eval Infrastructure
+  confidence: HIGH
+  regression_candidate: null
+- task_id: ACPT-PRE-001
+  name: Preview Unavailable
+  category: Preview / Capability
+  type: Core
+  priority: P0
+  input:
+  - 试听这首
+  precondition:
+  - target resolves but preview URL/capability is unavailable
+  required_context:
+  - canonical target
+  - preview availability/binding state
+  expected_behavior:
+  - do not expose/claim unavailable preview
+  - show only real alternatives
+  - keep runtime state consistent with user message
+  expected_intent: preview
+  expected_tool_behavior:
+  - preview fails closed when lookup/binding has no real URL
+  - ActionAttempt requires started=true
+  expected_state_behavior:
+  - preview state must not become active when unavailable
+  expected_output:
+  - honest unavailable/fallback response
+  must_not:
+  - claim preview started
+  - construct nonexistent preview URL
+  pass_criteria:
+  - tool/runtime says unavailable and final response does not claim success
+  fail_criteria:
+  - false started state or invented URL
+  automation_level: strong_existing_automated_plus_uat_gap
+  owner_uat_required: true
+  evidence_requirements:
+  - preview availability
+  - exposed action
+  - runtime state/readback
+  - final response
+  existing_tests:
+  - file: tests/test_catalog_library.py
+    case: CatalogUsageToolTest.test_preview_fails_closed_without_itunes_binding
+  - file: tests/test_playback_tools.py
+    case: PreviewBatchTest.test_batch_with_no_previewable_items_fails_closed
+  - file: tests/test_action_attempt.py
+    case: ActionAttemptContractTest.test_preview_ok_and_started_false_fails
+  - file: tests/test_web_shell.py
+    case: WebShellAppTest.test_web_reference_preview_started_false_never_claims_success
+  runtime_evidence:
+  - source: AgentRequestJournalRepository
+    availability: available
+    fields:
+    - preview tool request/result
+  - source: ActionAttempt
+    availability: in_process_only
+    fields:
+    - expected target
+    - tool result
+    - started/final status
+  - source: preview runtime/session state
+    availability: session_local
+    fields:
+    - active preview state
+  evidence_gaps:
+  - fixed Owner UAT case for preview-unavailable is not keyed to an acceptance ID
+  coverage_status: PARTIAL
+  gap_categories:
+  - Readback
+  - Eval Infrastructure
+  confidence: HIGH
+  regression_candidate: No new automated regression required now; add fixed Owner UAT procedure/evidence snapshot.
+- task_id: ACPT-PLAY-001
+  name: Playback Permission Failure
+  category: Playback / Permission
+  type: Core
+  priority: P0
+  input:
+  - 播放这首
+  precondition:
+  - formal playback permission/capability denied or adapter unavailable
+  required_context:
+  - canonical target
+  - permission/capability state
+  expected_behavior:
+  - surface permission/capability failure
+  - do not claim playback success
+  - show alternative only if actually executable
+  expected_intent: playback
+  expected_tool_behavior:
+  - permission gate prevents unsupported mutation
+  - formal success requires strict readback
+  expected_state_behavior:
+  - player state is not falsely advanced to playing
+  expected_output:
+  - honest permission/capability failure
+  must_not:
+  - execute unsupported action
+  - equate catalog availability with formal playback capability
+  - claim success without readback
+  pass_criteria:
+  - permission failure is typed
+  - no false successful ActionAttempt
+  - final response is honest
+  fail_criteria:
+  - unauthorized execution or false-success presentation
+  automation_level: strong_existing_automated_plus_uat_gap
+  owner_uat_required: true
+  evidence_requirements:
+  - permission/capability
+  - action attempt
+  - tool result
+  - player/readback
+  - final response
+  existing_tests:
+  - file: tests/test_agent_permission.py
+    case: DecideAgentPermissionTest.test_read_only_client_is_denied_for_mutations_and_live_writes
+  - file: tests/test_playback_tools.py
+    case: PlaybackToolsTest.test_read_only_client_denied
+  - file: tests/test_playback_tools.py
+    case: PlaybackToolsTest.test_no_playback_adapter_fails_closed
+  - file: tests/test_action_attempt.py
+    case: ActionAttemptContractTest.test_shared_runner_never_upgrades_tool_ok_after_player_mismatch
+  - file: tests/test_provider_agent.py
+    case: DirectActionTerminalTruthTest.test_formal_play_uses_strict_readback_and_skips_provider_closeout
+  runtime_evidence:
+  - source: AgentRequestJournalRepository
+    availability: available
+    fields:
+    - permission/tool outcome
+    - request/result
+  - source: ActionAttempt
+    availability: in_process_only
+    fields:
+    - expected target
+    - actual player/readback
+    - terminal status
+  - source: get_now_playing readback
+    availability: available
+    fields:
+    - player canonical
+    - state
+  evidence_gaps:
+  - fixed real-product permission-failure UAT case is not keyed to acceptance evidence
+  coverage_status: PARTIAL
+  gap_categories:
+  - Readback
+  - Eval Infrastructure
+  confidence: HIGH
+  regression_candidate: No duplicate automated test required; define Owner UAT procedure and evidence capture.
+- task_id: ACPT-FAIL-002
+  name: Tool / External Service Failure
+  category: Tool / Runtime Failure
+  type: Core
+  priority: P0
+  input:
+  - any task requiring a provider/tool that times out or returns an execution error
+  precondition:
+  - controlled provider/tool failure
+  required_context:
+  - tool call
+  - retry budget
+  - terminal state
+  expected_behavior:
+  - unknown/timeout is not described as success
+  - retry only when safe and within budget
+  - terminal state is explainable
+  expected_intent: task-specific
+  expected_tool_behavior:
+  - typed error
+  - bounded retry/recovery
+  expected_state_behavior:
+  - unknown result does not become verified success
+  expected_output:
+  - honest error/fallback
+  must_not:
+  - claim success on unknown outcome
+  - retry forever
+  pass_criteria:
+  - typed failure preserved
+  - retry count within policy
+  - no false success
+  fail_criteria:
+  - unknown/timeout becomes success
+  - unbounded retry
+  automation_level: strong_existing_automated
+  owner_uat_required: conditional
+  evidence_requirements:
+  - tool invocation
+  - timeout/network result
+  - retry count
+  - final state
+  - final response
+  existing_tests:
+  - file: tests/test_providers.py
+    case: DeepSeekResponseParsingTest.test_error_mapping
+  - file: tests/test_providers.py
+    case: CodexProviderTest.test_timeout_maps_typed
+  - file: tests/test_provider_agent.py
+    case: ProviderAgentLoopTest.test_provider_errors_propagate_typed
+  - file: tests/test_provider_agent.py
+    case: ProviderAgentLoopTest.test_provider_repeats_after_policy_fallback_are_budget_blocked
+  runtime_evidence:
+  - source: AgentRequestJournalRepository
+    availability: available
+    fields:
+    - tool_name
+    - tool_parameters
+    - outcome
+    - error_code
+    - error_message
+  - source: ProviderRunTrace
+    availability: when_instrumented
+    fields:
+    - rounds
+    - tool calls
+    - provider/tool duration_ms
+    - attempt sequence
+  evidence_gaps:
+  - retry_count is derived from trace rather than one first-class eval field
+  coverage_status: COVERED
+  gap_categories:
+  - Observability
+  - Eval Infrastructure
+  confidence: HIGH
+  regression_candidate: null
+- task_id: ACPT-COLD-001
+  name: Cold Start / No Preference Data
+  category: Cold Start
+  type: Core
+  priority: P1
+  input:
+  - 推荐几首适合晚上听的歌
+  precondition:
+  - no durable preference evidence for the relevant user/state
+  required_context:
+  - neutral preference state
+  - current explicit intent
+  - catalog/library supply
+  expected_behavior:
+  - admit/behave consistently with absent preference evidence
+  - use current intent as primary constraint
+  - still use real catalog candidates when available
+  expected_intent: recommendation
+  expected_tool_behavior:
+  - fallback to inferred/catalog path when direct positive preference evidence is absent
+  expected_state_behavior:
+  - do not fabricate or persist long-term preference
+  expected_output:
+  - real recommendation or honest no-result without invented preference rationale
+  must_not:
+  - invent long-term preference
+  - refuse a reasonable current-intent request solely because preference data is absent
+  pass_criteria:
+  - neutral context stays neutral
+  - generation can use inferred/catalog path
+  - no fabricated preference evidence
+  fail_criteria:
+  - invented preference or unnecessary hard failure
+  automation_level: partial_existing_automated
+  owner_uat_required: false
+  evidence_requirements:
+  - preference state
+  - library/catalog state
+  - effective context
+  - candidate source
+  - final response
+  existing_tests:
+  - file: tests/test_active_context_tool.py
+    case: ActiveContextToolTest.test_fresh_service_reports_neutral_context
+  - file: tests/test_agent_service.py
+    case: SharedAgentServiceTest.test_query_track_preference_confidence_is_none_without_evidence
+  - file: tests/test_agent_service.py
+    case: SharedAgentServiceTest.test_plain_falls_back_to_inferred_when_no_positive_direct_evidence
+  - file: tests/test_agent_service.py
+    case: FreshDrivenChannelIntegrationTest.test_zero_affinity_fresh_reaches_batch_via_channel
+  runtime_evidence:
+  - source: ActiveMusicContext
+    availability: available
+    fields:
+    - neutral preference/context projection
+  - source: PreferencePersistenceRepository
+    availability: available
+    fields:
+    - absence of durable evidence
+  - source: RecommendationRun
+    availability: available
+    fields:
+    - candidate source/items
+  - source: AgentRequestJournalRepository
+    availability: available
+    fields:
+    - generation/discovery calls
+  evidence_gaps:
+  - no single fixed product-level cold-start case joins neutral state + explicit intent + final response
+  coverage_status: PARTIAL
+  gap_categories:
+  - Context
+  - Presentation
+  - Eval Infrastructure
+  confidence: HIGH
+  regression_candidate: Future minimal cold-start end-to-end acceptance case using existing neutral fixtures.
+- task_id: ACPT-FB-001
+  name: Feedback Semantics
+  category: Feedback / Learning
+  type: Core
+  priority: P0
+  input:
+  - 我喜欢这首
+  - 跳过
+  - 播放完成
+  - 试听完成
+  precondition:
+  - target/recommendation reference can be resolved where required
+  required_context:
+  - feedback kind
+  - target identity
+  - session state
+  - durable preference evidence
+  expected_behavior:
+  - explicit long-term preference can create durable evidence
+  - implicit behavior remains weak/implicit evidence
+  - temporary session adjustment stays session-scoped
+  expected_intent: feedback/learning as classified by existing contract
+  expected_tool_behavior:
+  - record/interpret/apply feedback through existing lifecycle
+  expected_state_behavior:
+  - durable preference changes only according to evidence strength/provenance
+  expected_output:
+  - acknowledgement grounded in actual recorded/applied feedback
+  must_not:
+  - Skip == Dislike
+  - Complete == Like
+  - Preview completion == long-term preference
+  pass_criteria:
+  - feedback classification/provenance is correct
+  - persistence matches explicit/implicit contract
+  fail_criteria:
+  - implicit behavior upgraded to explicit long-term preference
+  automation_level: strong_existing_automated
+  owner_uat_required: conditional
+  evidence_requirements:
+  - feedback classification
+  - session state change
+  - long-term preference mutation
+  - persistence evidence
+  existing_tests:
+  - file: tests/test_feedback_contract.py
+    case: FeedbackVocabularyTest.test_explicit_kinds_are_explicit_with_frozen_direction
+  - file: tests/test_feedback_interpretation.py
+    case: InterpretationSemanticsTest.test_skip_is_not_dislike
+  - file: tests/test_feedback_interpretation.py
+    case: InterpretationSemanticsTest.test_completed_playback_is_not_a_like
+  - file: tests/test_learning_application.py
+    case: LearningApplicationRepositoryTest.test_explicit_positive_evidence_becomes_durable_p06_state
+  - file: tests/test_agent_service.py
+    case: SharedAgentServiceTest.test_apply_learning_writes_durable_evidence_and_reads_back
+  runtime_evidence:
+  - source: feedback observation / interpretation / learning repositories
+    availability: available
+    fields:
+    - feedback identity
+    - kind
+    - provenance
+    - applied durable evidence
+  - source: AgentRequestJournalRepository
+    availability: available
+    fields:
+    - record/interpret/apply tool requests/results
+  evidence_gaps:
+  - no unified eval_case_id joins feedback lifecycle to optional UAT
+  coverage_status: COVERED
+  gap_categories:
+  - Eval Infrastructure
+  confidence: HIGH
+  regression_candidate: null
+- task_id: ACPT-P22-ROUTE-001
+  name: Deterministic Playback Command
+  category: P22 Extension / Playback Routing
+  type: Extension
+  priority: P0
+  input:
+  - 继续播放
+  - 暂停
+  - 下一首
+  - 上一首
+  precondition:
+  - runtime playback/preview context is known enough for the deterministic route
+  required_context:
+  - preview sounding state
+  - suspension/current playback state
+  expected_behavior:
+  - use deterministic routing without Provider/LLM when a closed-set route applies
+  - execute direct action
+  - verify readback when action semantics require it
+  expected_intent: deterministic playback command
+  expected_tool_behavior:
+  - provider rounds=0 for deterministic bypass cases
+  - direct routed action
+  expected_state_behavior:
+  - state changes only after verified action/readback
+  expected_output:
+  - short verified action result
+  must_not:
+  - invoke Provider for a closed-set deterministic command when route is resolvable
+  - claim success without required readback
+  pass_criteria:
+  - deterministic route selected
+  - provider loop bypass proven where applicable
+  - readback contract holds
+  fail_criteria:
+  - unnecessary Provider round
+  - wrong route/action
+  - false success
+  automation_level: partial_existing_automated
+  owner_uat_required: conditional
+  evidence_requirements:
+  - actual route
+  - provider/LLM call count
+  - direct action
+  - readback
+  - latency
+  existing_tests:
+  - file: tests/test_intent_router.py
+    case: SessionAwareRoutingTest.test_pause_family_routes_to_stop_preview_only_while_running
+  - file: tests/test_intent_router.py
+    case: SessionAwareRoutingTest.test_continue_family_keeps_routing_to_play_under_every_state
+  - file: tests/test_intent_router.py
+    case: AdvancePreviewRoutingTest.test_next_forms_advance_the_running_session
+  - file: tests/test_chat_session.py
+    case: ChatSessionCliTest.test_routed_pause_bypasses_the_provider_loop
+  - file: tests/test_action_attempt.py
+    case: ActionAttemptContractTest.test_pause_completes_only_after_observed_paused_state
+  runtime_evidence:
+  - source: deterministic router / chat-session result
+    availability: in_process_only
+    fields:
+    - route
+    - provider bypass
+  - source: ActionAttempt / player readback
+    availability: in_process_only
+    fields:
+    - executed action
+    - final state
+  - source: ProviderRunTrace
+    availability: when_instrumented
+    fields:
+    - provider rounds
+    - latency_ms
+  evidence_gaps:
+  - no unified per-case latency/provider-call evidence record
+  - previous-track coverage is not represented as a dedicated acceptance case in this corpus mapping
+  coverage_status: PARTIAL
+  gap_categories:
+  - Observability
+  - Eval Infrastructure
+  confidence: HIGH
+  regression_candidate: Include in Extension Corpus now; first runner/adapter should aggregate route, provider-round count
+    and latency without new production instrumentation.
+- task_id: ACPT-P22-CTX-004
+  name: Conversational Continuation / Pending Action
+  category: P22 Extension / Context
+  type: Extension
+  priority: P0
+  input:
+  - 'AI: 需要我试听 Wendy 吗？ / User: 开始试听'
+  - 'AI: 需要继续播放吗？ / User: 继续'
+  precondition:
+  - assistant previously offered a concrete action bound to a target or playback state
+  required_context:
+  - pending offered action
+  - offered target
+  - conversation turn linkage
+  expected_behavior:
+  - consume pending offered action
+  - preserve referenced target
+  - avoid unnecessary clarification when pending state uniquely resolves the request
+  expected_intent: continuation of pending offered action
+  expected_tool_behavior:
+  - execute only the offered/accepted action when authority is valid
+  expected_state_behavior:
+  - pending action is consumed/expired explicitly and does not drift to another target
+  expected_output:
+  - execute/acknowledge the intended pending action or fail closed if pending state is unavailable
+  must_not:
+  - lose target
+  - execute another target
+  - invent a pending offer
+  - unnecessarily ask for information already contained in pending action
+  pass_criteria:
+  - pending offer uniquely resolves continuation and correct target is executed/read back
+  fail_criteria:
+  - continuation becomes UNKNOWN/incorrect clarification despite sufficient pending context
+  - wrong target/action is executed
+  automation_level: gap_no_general_pending_offer_contract
+  owner_uat_required: true
+  evidence_requirements:
+  - pending offered action
+  - referenced target
+  - selection authority
+  - executed target
+  - readback target
+  - final response
+  existing_tests:
+  - file: tests/test_chat_session.py
+    case: ChatSessionCliTest.test_continue_with_a_suspension_still_restores_play
+  - file: tests/test_chat_session.py
+    case: ChatSessionCliTest.test_continue_without_a_suspension_declines_to_invent_a_restore
+  runtime_evidence:
+  - source: playback suspension register
+    availability: specialized_only
+    fields:
+    - pending restore intent
+  - source: general conversational offered-action state
+    availability: unavailable
+    fields: []
+    notes: Current durable PendingIntent is write-safety oriented, not a general assistant-offer continuation contract.
+  evidence_gaps:
+  - no general offered-action/pending-conversation state
+  - no generic target-bound continuation authority/evidence
+  coverage_status: GAP
+  gap_categories:
+  - Context
+  - Authority
+  - Selection
+  - Eval Infrastructure
+  confidence: HIGH
+  regression_candidate: Do not add an active PASS regression until P22-S2 defines the pending-action product contract and
+    root implementation.
