@@ -2,6 +2,8 @@
 
 Music Agent is a local-first AI music companion for Apple Music on macOS. It turns natural-language requests into structured music workflows, executes real playback or preview actions, and verifies external state before reporting success.
 
+**Links:** [Product Case Study](https://music-agent-case-study.netlify.app/) · [Product Eval](./eval/) · [User Guide](./docs/USER_GUIDE.zh-CN.md)
+
 > **V1 status:** demo implementation complete and engineering-validated on macOS.
 > **Production-ready:** not claimed.
 
